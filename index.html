@@ -36,7 +36,6 @@
         <header class="chat-header">
           <span id="chat-player" class="chat-player"></span>
           <div class="chat-header-actions">
-            <button id="edit-notification" class="text-button" type="button">Edit alert</button>
             <button id="toggle-notifications" class="text-button" type="button">Enable alerts</button>
           </div>
         </header>
@@ -44,9 +43,11 @@
         <p id="typing-indicator" class="typing-indicator" aria-live="polite" hidden></p>
         <form id="message-form" class="message-form">
           <label class="sr-only" for="message">Write a message</label>
-          <input id="message" name="message" maxlength="2000" placeholder="Write a message…" required />
+          <input id="message" name="message" maxlength="2000" placeholder="Write a message…" />
           <div class="message-actions">
-            <button type="submit" aria-label="Send message">↑</button>
+            <button id="send-button" type="submit" aria-label="Hide keyboard" title="Hide keyboard">
+              <span class="send-button-icon" aria-hidden="true">↑</span>
+            </button>
             <button id="quick-exit" class="quick-exit-button" type="button" aria-label="Quick exit to Google Search" title="Quick exit">×</button>
           </div>
         </form>

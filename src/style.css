@@ -281,6 +281,8 @@ button:disabled {
 .message-actions {
   position: relative;
   flex: 0 0 52px;
+  display: flex;
+  align-items: center;
 }
 
 .message-form button {
@@ -294,6 +296,16 @@ button:disabled {
   min-width: 52px;
   height: 52px;
   font-size: 24px;
+}
+
+.send-button-icon {
+  display: inline-block;
+  transform: rotate(0deg);
+  transition: transform 220ms ease;
+}
+
+.send-button-icon--drop {
+  transform: rotate(180deg);
 }
 
 .message-form .quick-exit-button {

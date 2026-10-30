@@ -11,18 +11,17 @@ const pinDots = document.querySelector('#pin-dots');
 const keypad = document.querySelector('#keypad');
 const chatPanel = document.querySelector('#chat-panel');
 const chatPlayer = document.querySelector('#chat-player');
-const editNotificationButton = document.querySelector('#edit-notification');
 const toggleNotificationsButton = document.querySelector('#toggle-notifications');
 const typingIndicator = document.querySelector('#typing-indicator');
 const messageForm = document.querySelector('#message-form');
 const messageInput = document.querySelector('#message');
+const sendButton = document.querySelector('#send-button');
 const messagesList = document.querySelector('#messages');
 const quickExitButton = document.querySelector('#quick-exit');
 
 const QUICK_EXIT_URL = 'https://www.google.com/search?q=weather';
-const NOTIFICATION_TEXT_KEY = 'chat-notification-title-v2';
 const NOTIFICATIONS_ENABLED_KEY = 'chat-notifications-enabled';
-const DEFAULT_NOTIFICATION_TEXT = 'Freeform Chat';
+const NOTIFICATION_TITLE = 'Freeform Chat';
 let pinDigits = '';
 let currentPin;
 let currentPlayer;
@@ -32,7 +31,6 @@ let typingIdleTimer;
 let renderedMessageIds = '';
 let currentMessages = [];
 let isTyping = false;
-let notificationText = localStorage.getItem(NOTIFICATION_TEXT_KEY) || DEFAULT_NOTIFICATION_TEXT;
 let notificationsEnabled = localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'true';
 let pushRegistration;
 
@@ -133,6 +131,14 @@ function updateNotificationButton() {
   toggleNotificationsButton.textContent = notificationsEnabled ? 'Disable alerts' : 'Enable alerts';
 }
 
+function updateSendButton() {
+  const hasMessage = Boolean(messageInput.value.trim());
+  const icon = sendButton.querySelector('.send-button-icon');
+  icon.classList.toggle('send-button-icon--drop', !hasMessage);
+  sendButton.setAttribute('aria-label', hasMessage ? 'Send message' : 'Hide keyboard');
+  sendButton.title = hasMessage ? 'Send message' : 'Hide keyboard';
+}
+
 async function syncMessages(pin, shouldScroll = false) {
   const result = await requestChat('load', pin);
   if (currentPin !== pin) return;
@@ -220,7 +226,7 @@ toggleNotificationsButton.addEventListener('click', async () => {
     const subscription = await getPushSubscription(pushConfig.vapidPublicKey);
     await requestChat('push-subscribe', currentPin, undefined, undefined, {
       subscription: subscription.toJSON(),
-      notificationTitle: notificationText,
+      notificationTitle: NOTIFICATION_TITLE,
     });
     notificationsEnabled = true;
     localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, 'true');
@@ -229,30 +235,6 @@ toggleNotificationsButton.addEventListener('click', async () => {
   } catch (error) {
     setStatus(`Could not enable push notifications: ${error.message}`, true);
   }
-});
-
-editNotificationButton.addEventListener('click', () => {
-  const text = window.prompt('Text to show for new messages:', notificationText);
-  if (text === null) return;
-  if (!text.trim()) {
-    setStatus('Notification text cannot be empty.', true);
-    return;
-  }
-
-  notificationText = text.trim();
-  localStorage.setItem(NOTIFICATION_TEXT_KEY, notificationText);
-  const updateSubscription = async () => {
-    const subscription = await pushRegistration?.pushManager.getSubscription();
-    if (subscription && currentPin && notificationsEnabled) {
-      await requestChat('push-subscribe', currentPin, undefined, undefined, {
-        subscription: subscription.toJSON(),
-        notificationTitle: notificationText,
-      });
-    }
-  };
-  void updateSubscription()
-    .then(() => setStatus('Notification title updated.'))
-    .catch((error) => setStatus(`Could not update notification title: ${error.message}`, true));
 });
 
 function updateTypingStatus(typing) {
@@ -366,7 +348,11 @@ document.addEventListener('keydown', (event) => {
 messageForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const content = messageInput.value.trim();
-  if (!content || !currentPin) return;
+  if (!content) {
+    messageInput.blur();
+    return;
+  }
+  if (!currentPin) return;
 
   updateTypingStatus(false);
   messageInput.focus({ preventScroll: true });
@@ -384,6 +370,7 @@ messageForm.addEventListener('submit', async (event) => {
       );
     updateMessages(messages, true);
     messageInput.value = '';
+    updateSendButton();
     setStatus('');
   } catch (error) {
     if (currentPin === pin) setStatus(`Could not send message: ${error.message}`, true);
@@ -393,6 +380,7 @@ messageForm.addEventListener('submit', async (event) => {
 });
 
 messageInput.addEventListener('input', () => {
+  updateSendButton();
   const typing = messageInput.value.length > 0;
   window.clearTimeout(typingIdleTimer);
   updateTypingStatus(typing);
@@ -413,3 +401,4 @@ quickExitButton.addEventListener('click', () => {
 showPinPanel();
 updatePinDots();
 updateNotificationButton();
+updateSendButton();
