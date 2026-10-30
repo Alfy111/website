@@ -35,15 +35,9 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
      subscription jsonb not null,
      notification_title text not null default 'Freeform Chat'
        check (char_length(notification_title) between 1 and 120),
-     notification_pending boolean not null default false,
-     notification_clear_token text,
      created_at timestamptz not null default now(),
      updated_at timestamptz not null default now()
    );
-a
-   alter table public.chat_push_subscriptions
-     add column if not exists notification_pending boolean not null default false,
-     add column if not exists notification_clear_token text;
 
    create index if not exists chat_push_subscriptions_player_idx
      on public.chat_push_subscriptions (player);
@@ -67,6 +61,6 @@ The function rate-limits incorrect PIN attempts by source IP. Four-digit PINs ar
 
 Chat history is stored in Supabase, so it is available from other devices using the same project and PINs. The browser only keeps the PIN in memory while its chat is unlocked.
 
-On iOS, deploy to HTTPS, open the site in Safari, add it to the Home Screen, open the installed app, unlock the chat, and tap **Enable alerts** to grant push permission and register that device. Repeat on each device. Push alerts use the title “Volume Should Be Turned Down” and the configured volume-reminder body; chat content is not included. Each device has at most one outstanding notification; more pushes are suppressed until that notification is dismissed or opened. Subscriptions are removed when alerts are disabled from the same device.
+On iOS, deploy to HTTPS, open the site in Safari, add it to the Home Screen, open the installed app, unlock the chat, and tap **Enable alerts** to grant push permission and register that device. Repeat on each device. Each incoming message sends its own push notification, so notifications can stack; chat content is not included. Alerts can be disabled independently on each device. Push display also depends on the device's notification and Focus settings.
 
 The red X beside the message button is a quick exit: it replaces the current page with a Google search for weather. Browsers generally do not let a website close a tab it did not open. The search query is sent to Google, so this exit is intended as a visual screen change, not a way to erase browser or network history.

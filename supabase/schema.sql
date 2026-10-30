@@ -28,15 +28,9 @@ create table if not exists public.chat_push_subscriptions (
   subscription jsonb not null,
   notification_title text not null default 'Freeform Chat'
     check (char_length(notification_title) between 1 and 120),
-  notification_pending boolean not null default false,
-  notification_clear_token text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
-alter table public.chat_push_subscriptions
-  add column if not exists notification_pending boolean not null default false,
-  add column if not exists notification_clear_token text;
 
 create index if not exists chat_push_subscriptions_player_idx
   on public.chat_push_subscriptions (player);

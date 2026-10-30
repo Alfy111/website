@@ -47,7 +47,6 @@ Deno.serve(async (request) => {
     isTyping?: unknown;
     subscription?: unknown;
     endpoint?: unknown;
-    clearToken?: unknown;
     notificationTitle?: unknown;
   };
   try {
@@ -57,20 +56,16 @@ Deno.serve(async (request) => {
   }
 
   if (
-    (body.action !== 'load' &&
-      body.action !== 'send' &&
-      body.action !== 'typing' &&
-      body.action !== 'push-config' &&
-      body.action !== 'push-subscribe' &&
-      body.action !== 'push-unsubscribe' &&
-      body.action !== 'push-cleared'
-  )) {
+    body.action !== 'load' &&
+    body.action !== 'send' &&
+    body.action !== 'typing' &&
+    body.action !== 'push-config' &&
+    body.action !== 'push-subscribe' &&
+    body.action !== 'push-unsubscribe'
+  ) {
     return respond({ error: 'Invalid action.' }, 400);
   }
-  if (
-    body.action !== 'push-cleared' &&
-    (typeof body.pin !== 'string' || !/^\d{4}$/.test(body.pin))
-  ) {
+  if (typeof body.pin !== 'string' || !/^\d{4}$/.test(body.pin)) {
     return respond({ error: 'Enter a 4-digit PIN.' }, 400);
   }
 
@@ -92,39 +87,6 @@ Deno.serve(async (request) => {
   const supabase = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-
-  if (body.action === 'push-cleared') {
-    if (
-      typeof body.endpoint !== 'string' ||
-      body.endpoint.length > 2048 ||
-      !isSupportedPushEndpoint(body.endpoint) ||
-      typeof body.clearToken !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(body.clearToken)
-    ) {
-      return respond({ error: 'Invalid notification acknowledgement.' }, 400);
-    }
-
-    const { error } = await supabase
-      .from('chat_push_subscriptions')
-      .update({
-        notification_pending: false,
-        notification_clear_token: null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('endpoint', body.endpoint)
-      .eq('notification_clear_token', body.clearToken);
-
-    if (error) {
-      console.error('Could not clear pending push notification:', error.message);
-      return respond({ error: 'Could not clear pending notification.' }, 500);
-    }
-
-    return respond({});
-  }
-
-  if (typeof body.pin !== 'string' || !/^\d{4}$/.test(body.pin)) {
-    return respond({ error: 'Enter a 4-digit PIN.' }, 400);
-  }
 
   if (!player) {
     const sourceAddress = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
@@ -315,35 +277,13 @@ Deno.serve(async (request) => {
       webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
       const { data: subscriptions, error: subscriptionError } = await supabase
         .from('chat_push_subscriptions')
-        .select('endpoint, subscription, notification_pending')
+        .select('endpoint, subscription')
         .eq('player', recipientPlayer);
 
       if (subscriptionError) {
         console.error('Could not load message push recipients:', subscriptionError.message);
       } else {
         await Promise.all(subscriptions.map(async (savedSubscription) => {
-          if (savedSubscription.notification_pending) return;
-
-          const clearTokenBytes = crypto.getRandomValues(new Uint8Array(32));
-          const clearToken = Array.from(clearTokenBytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-          const { data: claimedSubscription, error: claimError } = await supabase
-            .from('chat_push_subscriptions')
-            .update({
-              notification_pending: true,
-              notification_clear_token: clearToken,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('endpoint', savedSubscription.endpoint)
-            .eq('notification_pending', false)
-            .select('endpoint')
-            .maybeSingle();
-
-          if (claimError) {
-            console.error('Could not reserve device for push notification:', claimError.message);
-            return;
-          }
-          if (!claimedSubscription) return;
-
           try {
             await webpush.sendNotification(
               savedSubscription.subscription,
@@ -353,10 +293,6 @@ Deno.serve(async (request) => {
                 icon: '/icons/volume-alert-192.png',
                 badge: '/icons/volume-alert-192.png',
                 url: '/',
-                endpoint: savedSubscription.endpoint,
-                clearToken,
-                clearUrl: `${url.replace(/\/+$/, '')}/functions/v1/private-chat`,
-                apiKey: Deno.env.get('SUPABASE_ANON_KEY'),
               }),
             );
           } catch (pushError) {
@@ -372,14 +308,6 @@ Deno.serve(async (request) => {
                 console.error('Could not delete expired push subscription:', deleteError.message);
               }
             } else {
-              const { error: releaseError } = await supabase
-                .from('chat_push_subscriptions')
-                .update({ notification_pending: false, notification_clear_token: null })
-                .eq('endpoint', savedSubscription.endpoint)
-                .eq('notification_clear_token', clearToken);
-              if (releaseError) {
-                console.error('Could not release failed push notification reservation:', releaseError.message);
-              }
               console.error('Could not deliver chat push notification:', pushError);
             }
           }
