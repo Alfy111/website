@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#09090b" />
+    <title>Our little chat</title>
+  </head>
+  <body>
+    <main class="chat-shell">
+      <section id="pin-panel" class="pin-panel" aria-label="Enter PIN">
+        <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
+        <div id="keypad" class="keypad">
+          <button type="button" data-digit="1" aria-label="1">1</button>
+          <button type="button" data-digit="2" aria-label="2">2</button>
+          <button type="button" data-digit="3" aria-label="3">3</button>
+          <button type="button" data-digit="4" aria-label="4">4</button>
+          <button type="button" data-digit="5" aria-label="5">5</button>
+          <button type="button" data-digit="6" aria-label="6">6</button>
+          <button type="button" data-digit="7" aria-label="7">7</button>
+          <button type="button" data-digit="8" aria-label="8">8</button>
+          <button type="button" data-digit="9" aria-label="9">9</button>
+          <span class="keypad-spacer" aria-hidden="true"></span>
+          <button type="button" data-digit="0" aria-label="0">0</button>
+          <button type="button" data-action="backspace" aria-label="Delete last digit">⌫</button>
+        </div>
+      </section>
+
+      <section id="chat-panel" class="chat-panel" aria-label="Conversation" hidden>
+        <header class="chat-header">
+          <span id="chat-player" class="chat-player"></span>
+        </header>
+        <ol id="messages" class="messages" aria-live="polite" aria-relevant="additions"></ol>
+        <form id="message-form" class="message-form">
+          <label class="sr-only" for="message">Write a message</label>
+          <input id="message" name="message" maxlength="2000" placeholder="Write a message…" required />
+          <div class="message-actions">
+            <button type="submit" aria-label="Send message">↑</button>
+            <button id="quick-exit" class="quick-exit-button" type="button" aria-label="Quick exit to Google Search" title="Quick exit">×</button>
+          </div>
+        </form>
+      </section>
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

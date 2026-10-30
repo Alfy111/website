@@ -1,0 +1,2 @@
+[functions.private-chat]
+verify_jwt = false
