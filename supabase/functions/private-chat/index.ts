@@ -6,6 +6,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+const PHOTO_BUCKET = 'chat-photos';
+const MAX_PHOTO_SIZE_BYTES = 8 * 1024 * 1024;
+const PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+};
 
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -32,6 +42,16 @@ function isSupportedPushEndpoint(value: string) {
   }
 }
 
+function isPlayerPhotoPath(value: unknown, player: string): value is string {
+  if (typeof value !== 'string' || !value.startsWith(`${player}/`)) return false;
+  return isPhotoFilename(value.slice(player.length + 1));
+}
+
+function isPhotoFilename(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|png|webp|gif|heic|heif)$/i
+    .test(value);
+}
+
 Deno.serve(async (request) => {
   if (request.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -45,6 +65,12 @@ Deno.serve(async (request) => {
     pin?: unknown;
     content?: unknown;
     isTyping?: unknown;
+    messageId?: unknown;
+    reaction?: unknown;
+    enabled?: unknown;
+    contentType?: unknown;
+    paths?: unknown;
+    mediaPath?: unknown;
     subscription?: unknown;
     endpoint?: unknown;
     notificationTitle?: unknown;
@@ -60,6 +86,8 @@ Deno.serve(async (request) => {
     body.action !== 'send' &&
     body.action !== 'typing' &&
     body.action !== 'react' &&
+    body.action !== 'photo-upload' &&
+    body.action !== 'photo-urls' &&
     body.action !== 'push-config' &&
     body.action !== 'push-subscribe' &&
     body.action !== 'push-unsubscribe'
@@ -84,6 +112,10 @@ Deno.serve(async (request) => {
     : body.pin === pin2
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : undefined;
+  const allowedPhotoPlayers = [
+    Deno.env.get('CHAT_PLAYER_1') || 'ashy',
+    Deno.env.get('CHAT_PLAYER_2') || 'alfey',
+  ];
 
   const supabase = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
@@ -118,6 +150,58 @@ Deno.serve(async (request) => {
     return respond({ vapidPublicKey });
   }
 
+  if (body.action === 'photo-upload') {
+    if (typeof body.contentType !== 'string' || !PHOTO_EXTENSIONS[body.contentType]) {
+      return respond({ error: 'Unsupported photo type.' }, 400);
+    }
+
+    const path = `${player}/${crypto.randomUUID()}.${PHOTO_EXTENSIONS[body.contentType]}`;
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUploadUrl(path);
+
+    if (error) {
+      console.error('Could not create signed photo upload URL:', error.message);
+      return respond({ error: 'Could not prepare the photo upload.' }, 500);
+    }
+
+    return respond({ path: data.path, signedUrl: data.signedUrl });
+  }
+
+  if (body.action === 'photo-urls') {
+    if (
+      !Array.isArray(body.paths) ||
+      body.paths.length > 50 ||
+      body.paths.some((path) => typeof path !== 'string' || !allowedPhotoPlayers.some((owner) =>
+        isPlayerPhotoPath(path, owner)
+      ))
+    ) {
+      return respond({ error: 'Invalid photo paths.' }, 400);
+    }
+
+    const paths = [...new Set(body.paths as string[])];
+    if (!paths.length) return respond({ photoUrls: {} });
+
+    const { data, error } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .createSignedUrls(paths, 3600);
+
+    if (error) {
+      console.error('Could not create signed photo URLs:', error.message);
+      return respond({ error: 'Could not load chat photos.' }, 500);
+    }
+
+    const photoUrls: Record<string, string> = {};
+    for (const item of data) {
+      if (item.error || !item.signedUrl) {
+        console.error('Could not create signed URL for chat photo:', item.path, item.error);
+        continue;
+      }
+      photoUrls[item.path] = item.signedUrl;
+    }
+    return respond({ photoUrls });
+  }
+
   if (body.action === 'load') {
     const otherPlayer = body.pin === pin1
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
@@ -126,7 +210,7 @@ Deno.serve(async (request) => {
     const [{ data, error }, { data: typingState, error: typingError }] = await Promise.all([
       supabase
         .from('chat_messages')
-        .select('id, player, content, created_at')
+        .select('id, player, content, media_path, created_at')
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase
@@ -175,6 +259,7 @@ Deno.serve(async (request) => {
         id: message.id,
         player: message.player,
         content: message.content,
+        mediaPath: message.media_path,
         createdAt: message.created_at,
         reactions: reactionsByMessage.get(message.id) ?? [],
       })),
@@ -184,34 +269,34 @@ Deno.serve(async (request) => {
   if (body.action === 'react') {
     const messageId = body.messageId;
     const reaction = body.reaction;
+    const enabled = body.enabled;
     if (
       typeof messageId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(messageId) ||
-      (reaction !== null &&
-        reaction !== 'heart' &&
+      (reaction !== 'heart' &&
         reaction !== 'laugh' &&
         reaction !== 'wow' &&
         reaction !== 'sad' &&
         reaction !== 'angry' &&
-        reaction !== 'like')
+        reaction !== 'like') ||
+      typeof enabled !== 'boolean'
     ) {
       return respond({ error: 'Invalid message reaction.' }, 400);
     }
 
-    const query = supabase
-      .from('chat_message_reactions')
-      .delete()
-      .eq('message_id', messageId)
-      .eq('player', player);
-
-    const { error } = reaction === null
-      ? await query
-      : await supabase
+    const { error } = enabled
+      ? await supabase
         .from('chat_message_reactions')
         .upsert(
           { message_id: messageId, player, reaction },
-          { onConflict: 'message_id,player' },
-        );
+          { onConflict: 'message_id,player,reaction' },
+        )
+      : await supabase
+        .from('chat_message_reactions')
+        .delete()
+        .eq('message_id', messageId)
+        .eq('player', player)
+        .eq('reaction', reaction);
 
     if (error) {
       console.error('Could not save chat reaction:', error.message);
@@ -314,14 +399,32 @@ Deno.serve(async (request) => {
     return respond({});
   }
 
-  if (typeof body.content !== 'string' || !body.content.trim() || body.content.trim().length > 2000) {
-    return respond({ error: 'Messages must be between 1 and 2000 characters.' }, 400);
+  const content = typeof body.content === 'string' ? body.content.trim() : '';
+  const mediaPath = body.mediaPath === undefined ? null : body.mediaPath;
+  if (
+    (content.length > 2000 || (!content && !mediaPath)) ||
+    (mediaPath !== null && !isPlayerPhotoPath(mediaPath, player))
+  ) {
+    return respond({ error: 'Enter a message or attach a valid photo.' }, 400);
+  }
+
+  if (mediaPath) {
+    const { data: photo, error: photoError } = await supabase.storage
+      .from(PHOTO_BUCKET)
+      .info(mediaPath);
+    if (photoError || !photo) {
+      if (photoError) console.error('Could not verify uploaded chat photo:', photoError.message);
+      return respond({ error: 'The photo upload is missing or expired. Please retry.' }, 400);
+    }
+    if (photo.metadata?.size > MAX_PHOTO_SIZE_BYTES) {
+      return respond({ error: 'Photos must be 8 MB or smaller.' }, 400);
+    }
   }
 
   const { data: message, error } = await supabase
     .from('chat_messages')
-    .insert({ player, content: body.content.trim() })
-    .select('id, player, content, created_at')
+    .insert({ player, content, media_path: mediaPath })
+    .select('id, player, content, media_path, created_at')
     .single();
 
   if (error) {
@@ -386,6 +489,7 @@ Deno.serve(async (request) => {
       id: message.id,
       player: message.player,
       content: message.content,
+      mediaPath: message.media_path,
       createdAt: message.created_at,
     },
   });

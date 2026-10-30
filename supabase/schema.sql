@@ -1,9 +1,26 @@
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   player text not null check (char_length(player) between 1 and 40),
-  content text not null check (char_length(content) between 1 and 2000),
+  content text not null default '',
+  media_path text,
+  constraint chat_messages_content_check check (
+    (media_path is null and char_length(content) between 1 and 2000) or
+    (media_path is not null and char_length(content) between 0 and 2000)
+  ),
   created_at timestamptz not null default now()
 );
+
+alter table public.chat_messages
+  add column if not exists media_path text,
+  alter column content drop not null,
+  alter column content set default '';
+
+alter table public.chat_messages
+  drop constraint if exists chat_messages_content_check,
+  add constraint chat_messages_content_check check (
+    (media_path is null and char_length(content) between 1 and 2000) or
+    (media_path is not null and char_length(content) between 0 and 2000)
+  );
 
 create index if not exists chat_messages_created_at_idx
   on public.chat_messages (created_at);
@@ -12,12 +29,26 @@ alter table public.chat_messages enable row level security;
 revoke all on public.chat_messages from anon, authenticated;
 grant select, insert on public.chat_messages to service_role;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'chat-photos',
+  'chat-photos',
+  false,
+  8388608,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']
+)
+on conflict (id) do update
+set
+  public = false,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
 create table if not exists public.chat_message_reactions (
   message_id uuid not null references public.chat_messages (id) on delete cascade,
   player text not null check (char_length(player) between 1 and 40),
   reaction text not null check (reaction in ('heart', 'laugh', 'wow', 'sad', 'angry', 'like')),
   created_at timestamptz not null default now(),
-  primary key (message_id, player)
+  primary key (message_id, player, reaction)
 );
 
 alter table public.chat_message_reactions enable row level security;

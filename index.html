@@ -26,7 +26,13 @@
           <button type="button" data-digit="7" aria-label="7">7</button>
           <button type="button" data-digit="8" aria-label="8">8</button>
           <button type="button" data-digit="9" aria-label="9">9</button>
-          <span class="keypad-spacer" aria-hidden="true"></span>
+          <button
+            id="pin-quick-exit"
+            class="quick-exit-button"
+            type="button"
+            aria-label="Quick exit to Google Search"
+            title="Quick exit"
+          >×</button>
           <button type="button" data-digit="0" aria-label="0">0</button>
           <button type="button" data-action="backspace" aria-label="Delete last digit">⌫</button>
         </div>
@@ -59,9 +65,17 @@
         <form id="message-form" class="message-form">
           <label class="sr-only" for="message">Write a message</label>
           <input id="message" name="message" maxlength="2000" placeholder="Write a message…" />
+          <input id="photo-input" class="sr-only" type="file" accept="image/*" multiple />
+          <button id="choose-photo" class="photo-button" type="button" aria-label="Choose photos" title="Choose photos">
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none">
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <circle cx="8.5" cy="9" r="1.5" />
+              <path d="m21 15-5-5L5 20" />
+            </svg>
+          </button>
           <div class="message-actions">
-            <button id="send-button" type="submit" aria-label="Hide keyboard" title="Hide keyboard">
-              <span class="send-button-icon" aria-hidden="true">↑</span>
+            <button id="scroll-latest-button" type="button" aria-label="Scroll to latest message" title="Scroll to latest message" hidden>
+              <span aria-hidden="true">↓</span>
             </button>
             <button id="quick-exit" class="quick-exit-button" type="button" aria-label="Quick exit to Google Search" title="Quick exit">×</button>
           </div>

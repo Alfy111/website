@@ -107,9 +107,17 @@ button:disabled {
   background: #3f3f46;
 }
 
-.keypad .keypad-spacer {
-  visibility: hidden;
-  pointer-events: none;
+.keypad .quick-exit-button {
+  border: 1px solid #ef4444;
+  background: #450a0a;
+  color: #fca5a5;
+  font-size: 40px;
+  line-height: 1;
+  opacity: 0.2;
+}
+
+.keypad .quick-exit-button:hover {
+  background: #7f1d1d;
 }
 
 .status {
@@ -287,6 +295,25 @@ button:disabled {
   padding: 10px 13px 8px;
   border-radius: 14px 14px 14px 4px;
   background: #18181b;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.message--entering {
+  animation: message-enter 240ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+@keyframes message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .message--own {
@@ -310,11 +337,62 @@ button:disabled {
   white-space: pre-wrap;
 }
 
+.message-photo {
+  display: block;
+  width: min(260px, 65vw);
+  max-width: min(260px, 65vw);
+  max-height: 320px;
+  margin: 4px 0 7px;
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+.message-photo--error {
+  min-height: 48px;
+  color: #fca5a5;
+  font-size: 12px;
+}
+
 .message-time {
   display: block;
   color: #71717a;
   font-size: 10px;
   text-align: right;
+}
+
+.message-delivery {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px;
+  color: #a1a1aa;
+  font-size: 10px;
+}
+
+.message-delivery-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgb(161 161 170 / 25%);
+  border-top-color: #e4e4e7;
+  border-radius: 50%;
+  animation: message-send-spin 700ms linear infinite;
+}
+
+@keyframes message-send-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.message-delivery--failed {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fca5a5;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  touch-action: manipulation;
 }
 
 .message-reaction-controls {
@@ -358,18 +436,54 @@ button:disabled {
 
 .reaction-options {
   display: none;
-  flex-wrap: wrap;
-  gap: 4px;
-  width: 196px;
-  padding: 5px;
+  grid-template-columns: repeat(3, 82px);
+  gap: 6px;
+  width: max-content;
+  padding: 8px;
   border: 1px solid #3f3f46;
   border-radius: 12px;
   background: #09090b;
   box-shadow: 0 4px 14px rgb(0 0 0 / 40%);
 }
 
-.message-reaction-picker[open] .reaction-options {
-  display: flex;
+.message-reaction-picker--open .reaction-options {
+  display: grid;
+}
+
+.message-reaction-picker--open .reaction-option {
+  animation: reaction-pop 240ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+.message-reaction-picker--open .reaction-option:nth-child(2) {
+  animation-delay: 45ms;
+}
+
+.message-reaction-picker--open .reaction-option:nth-child(3) {
+  animation-delay: 90ms;
+}
+
+.message-reaction-picker--open .reaction-option:nth-child(4) {
+  animation-delay: 135ms;
+}
+
+.message-reaction-picker--open .reaction-option:nth-child(5) {
+  animation-delay: 180ms;
+}
+
+.message-reaction-picker--open .reaction-option:nth-child(6) {
+  animation-delay: 225ms;
+}
+
+@keyframes reaction-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.55) translateY(8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
 }
 
 .reaction-option,
@@ -378,10 +492,21 @@ button:disabled {
 }
 
 .reaction-icon {
-  width: 20px;
-  height: 20px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.reaction-option {
+  width: 82px;
+  height: 72px;
+  padding: 2px;
+}
+
+.reaction-option .reaction-emoji {
+  font-size: 68px;
+  line-height: 1;
 }
 
 .reaction-chip {
@@ -413,6 +538,34 @@ button:disabled {
   padding: 12px 14px;
 }
 
+.message-form .photo-button {
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #3f3f46;
+  border-radius: 12px;
+  background: #18181b;
+  color: #e4e4e7;
+  touch-action: manipulation;
+}
+
+.photo-button svg {
+  width: 22px;
+  height: 22px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.message-form .photo-button:hover {
+  background: #27272a;
+}
+
 .message-actions {
   position: relative;
   flex: 0 0 52px;
@@ -433,14 +586,20 @@ button:disabled {
   font-size: 24px;
 }
 
-.send-button-icon {
-  display: inline-block;
-  transform: rotate(0deg);
-  transition: transform 220ms ease;
+.message-form #scroll-latest-button {
+  width: 52px;
+  min-width: 52px;
+  height: 52px;
+  border: 0;
+  border-radius: 50%;
+  background: #27272a;
+  color: #f4f4f5;
+  font-size: 24px;
+  line-height: 1;
 }
 
-.send-button-icon--drop {
-  transform: rotate(180deg);
+.message-form #scroll-latest-button:hover {
+  background: #3f3f46;
 }
 
 .message-form .quick-exit-button {

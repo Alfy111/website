@@ -44,12 +44,42 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
      player text not null check (char_length(player) between 1 and 40),
      reaction text not null check (reaction in ('heart', 'laugh', 'wow', 'sad', 'angry', 'like')),
      created_at timestamptz not null default now(),
-     primary key (message_id, player)
+     primary key (message_id, player, reaction)
    );
+
+   alter table public.chat_message_reactions
+     drop constraint if exists chat_message_reactions_pkey,
+     add constraint chat_message_reactions_pkey primary key (message_id, player, reaction);
 
    alter table public.chat_message_reactions enable row level security;
    revoke all on public.chat_message_reactions from anon, authenticated;
    grant select, insert, update, delete on public.chat_message_reactions to service_role;
+
+   alter table public.chat_messages
+     add column if not exists media_path text,
+     alter column content drop not null,
+     alter column content set default '';
+
+   alter table public.chat_messages
+     drop constraint if exists chat_messages_content_check,
+     add constraint chat_messages_content_check check (
+       (media_path is null and char_length(content) between 1 and 2000) or
+       (media_path is not null and char_length(content) between 0 and 2000)
+     );
+
+   insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+   values (
+     'chat-photos',
+     'chat-photos',
+     false,
+     8388608,
+     array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif']
+   )
+   on conflict (id) do update
+   set
+     public = false,
+     file_size_limit = excluded.file_size_limit,
+     allowed_mime_types = excluded.allowed_mime_types;
 
    create index if not exists chat_push_subscriptions_player_idx
      on public.chat_push_subscriptions (player);
@@ -73,6 +103,8 @@ The function rate-limits incorrect PIN attempts by source IP. Four-digit PINs ar
 
 Chat history is stored in Supabase, so it is available from other devices using the same project and PINs. The browser only keeps the PIN in memory while its chat is unlocked.
 
+Use the photo button beside the message field to select one or more gallery images. Photos are sent through the message queue and stored in a private Supabase Storage bucket; the upload limit is 8 MB per image.
+
 On iOS, deploy to HTTPS, open the site in Safari, add it to the Home Screen, open the installed app, unlock the chat, and tap **Enable alerts** to grant push permission and register that device. Repeat on each device. Each incoming message sends its own push notification, so notifications can stack; chat content is not included. Alerts can be disabled independently on each device. Push display also depends on the device's notification and Focus settings.
 
-The red X beside the message button is a quick exit: it replaces the current page with a Google search for weather. Browsers generally do not let a website close a tab it did not open. The search query is sent to Google, so this exit is intended as a visual screen change, not a way to erase browser or network history.
+The red X beside the message button is a quick exit: it replaces the current page with a Google search for “what's pax silica”. Browsers generally do not let a website close a tab it did not open. The search query is sent to Google, so this exit is intended as a visual screen change, not a way to erase browser or network history.
