@@ -99,17 +99,20 @@ async function requestChat(action, pin, content) {
   return result;
 }
 
-function updateMessages(messages, shouldScroll = false) {
+function updateMessages(messages, shouldScroll = false, preserveScroll = false) {
   const nextIds = messages.map((message) => message.id).join(',');
   if (nextIds === renderedMessageIds) return;
 
+  const previousScrollTop = messagesList.scrollTop;
   const wasAtBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 32;
   messagesList.replaceChildren();
   messages.forEach(renderMessage);
   currentMessages = messages;
   renderedMessageIds = nextIds;
 
-  if (shouldScroll || wasAtBottom) {
+  if (preserveScroll) {
+    messagesList.scrollTop = previousScrollTop;
+  } else if (shouldScroll || wasAtBottom) {
     messagesList.scrollTop = messagesList.scrollHeight;
   }
 }
@@ -213,7 +216,7 @@ messageForm.addEventListener('submit', async (event) => {
       : [...currentMessages, result.message].sort((first, second) =>
         first.createdAt.localeCompare(second.createdAt),
       );
-    updateMessages(messages, true);
+    updateMessages(messages, false, true);
     messageInput.value = '';
     setStatus('');
   } catch (error) {
