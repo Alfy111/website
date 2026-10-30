@@ -20,7 +20,7 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
    npx --yes web-push@3.6.7 generate-vapid-keys --json
    ```
 
-   Keep the private key secret. Add the public key to `.env` as `VITE_VAPID_PUBLIC_KEY` and to your Vercel environment variables. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (for example `mailto:you@example.com`) in Supabase Edge Function secrets, alongside `CHAT_PIN_1`, `CHAT_PIN_2`, `CHAT_PLAYER_1`, and `CHAT_PLAYER_2`. Never put the VAPID private key or service-role key in the frontend.
+   Keep the private key secret. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (for example `mailto:you@example.com`) in Supabase Edge Function secrets, alongside `CHAT_PIN_1`, `CHAT_PIN_2`, `CHAT_PLAYER_1`, and `CHAT_PLAYER_2`. Never put the VAPID private key or service-role key in the frontend. The app fetches the matching public key from the PIN-checked function when enabling push.
 
    ```sh
    supabase secrets set CHAT_PIN_1=your-first-pin CHAT_PIN_2=your-second-pin CHAT_PLAYER_1=ashy CHAT_PLAYER_2=alfey VAPID_PUBLIC_KEY=your-public-key VAPID_PRIVATE_KEY=your-private-key VAPID_SUBJECT=mailto:you@example.com
@@ -55,7 +55,7 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
 
    The project's service-role key is used only by the Edge Function and is never sent to the browser. The SQL schema blocks direct browser access to the messages table.
 
-8. Configure `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and `VITE_VAPID_PUBLIC_KEY` in Vercel. For local development, add them to `.env` and restart Vite.
+8. Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` in Vercel. For local development, add them to `.env` and restart Vite.
 
 The function rate-limits incorrect PIN attempts by source IP. Four-digit PINs are still low-entropy and this simple PIN gate is not suitable for highly sensitive conversations. The chat is shared between both PINs; each participant sees their own messages on the right.
 

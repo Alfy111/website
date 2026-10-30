@@ -1,6 +1,6 @@
 import './style.css';
 
-const { VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY, VITE_VAPID_PUBLIC_KEY } = import.meta.env;
+const { VITE_SUPABASE_URL, VITE_SUPABASE_PUBLISHABLE_KEY } = import.meta.env;
 const SYNC_INTERVAL_MS = 2000;
 const TYPING_HEARTBEAT_MS = 2000;
 const TYPING_IDLE_TIMEOUT_MS = 3000;
@@ -148,20 +148,30 @@ function decodeVapidPublicKey(publicKey) {
   return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0));
 }
 
-async function getPushSubscription() {
+function areKeysEqual(first, second) {
+  if (!first || !second || first.byteLength !== second.byteLength) return false;
+  const firstBytes = new Uint8Array(first);
+  const secondBytes = new Uint8Array(second);
+  return firstBytes.every((byte, index) => byte === secondBytes[index]);
+}
+
+async function getPushSubscription(vapidPublicKey) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     throw new Error('This browser does not support web push notifications.');
-  }
-  if (!VITE_VAPID_PUBLIC_KEY) {
-    throw new Error('Set VITE_VAPID_PUBLIC_KEY in the deployment environment and rebuild the site.');
   }
 
   pushRegistration = await navigator.serviceWorker.register('/service-worker.js');
   await navigator.serviceWorker.ready;
-  const existingSubscription = await pushRegistration.pushManager.getSubscription();
-  return existingSubscription || pushRegistration.pushManager.subscribe({
+  let subscription = await pushRegistration.pushManager.getSubscription();
+  const applicationServerKey = decodeVapidPublicKey(vapidPublicKey);
+  if (subscription && !areKeysEqual(subscription.options.applicationServerKey, applicationServerKey)) {
+    await subscription.unsubscribe();
+    subscription = null;
+  }
+
+  return subscription || pushRegistration.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: decodeVapidPublicKey(VITE_VAPID_PUBLIC_KEY),
+    applicationServerKey,
   });
 }
 
@@ -206,7 +216,8 @@ toggleNotificationsButton.addEventListener('click', async () => {
       return;
     }
 
-    const subscription = await getPushSubscription();
+    const pushConfig = await requestChat('push-config', currentPin);
+    const subscription = await getPushSubscription(pushConfig.vapidPublicKey);
     await requestChat('push-subscribe', currentPin, undefined, undefined, {
       subscription: subscription.toJSON(),
       notificationTitle: notificationText,

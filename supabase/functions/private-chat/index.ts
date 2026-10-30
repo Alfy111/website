@@ -59,6 +59,7 @@ Deno.serve(async (request) => {
     (body.action !== 'load' &&
       body.action !== 'send' &&
       body.action !== 'typing' &&
+      body.action !== 'push-config' &&
       body.action !== 'push-subscribe' &&
       body.action !== 'push-unsubscribe') ||
     typeof body.pin !== 'string' ||
@@ -101,6 +102,18 @@ Deno.serve(async (request) => {
       return respond({ error: 'Too many incorrect PIN attempts. Try again in 15 minutes.' }, 429);
     }
     return respond({ error: 'Incorrect PIN.' }, 401);
+  }
+
+  if (body.action === 'push-config') {
+    const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
+    const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
+    const vapidSubject = Deno.env.get('VAPID_SUBJECT');
+    if (!vapidPublicKey || !vapidPrivateKey || !vapidSubject) {
+      console.error('Web Push VAPID configuration is incomplete.');
+      return respond({ error: 'Push notifications are not configured on the server.' }, 500);
+    }
+
+    return respond({ vapidPublicKey });
   }
 
   if (body.action === 'load') {
