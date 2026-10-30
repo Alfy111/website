@@ -1,7 +1,7 @@
 {
-  "name": "Freeform Chat",
-  "short_name": "Freeform",
-  "description": "A private, two-person chat.",
+  "name": "Volume Should Be Turned Down",
+  "short_name": "Volume Down",
+  "description": "A private chat for turning the volume down.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

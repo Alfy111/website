@@ -52,6 +52,7 @@ let syncTimer;
 let typingHeartbeatTimer;
 let typingIdleTimer;
 let renderedMessageIds = '';
+let previousMessagesScrollTop = 0;
 let currentMessages = [];
 let serverMessages = [];
 const outgoingMessages = [];
@@ -361,10 +362,21 @@ function scrollMessagesToLatest() {
 
 function updateScrollLatestButton() {
   const isAwayFromLatest = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight > 32;
-  scrollLatestButton.hidden = !isAwayFromLatest;
+  scrollLatestButton.classList.toggle('scroll-latest-button--visible', isAwayFromLatest);
+  scrollLatestButton.setAttribute('aria-hidden', String(!isAwayFromLatest));
+  scrollLatestButton.tabIndex = isAwayFromLatest ? 0 : -1;
 }
 
-messagesList.addEventListener('scroll', updateScrollLatestButton, { passive: true });
+messagesList.addEventListener('scroll', () => {
+  const scrollTop = messagesList.scrollTop;
+  if (scrollTop < previousMessagesScrollTop && document.activeElement === messageInput) {
+    window.clearTimeout(typingIdleTimer);
+    messageInput.blur();
+    updateTypingStatus(false);
+  }
+  previousMessagesScrollTop = scrollTop;
+  updateScrollLatestButton();
+}, { passive: true });
 scrollLatestButton.addEventListener('click', () => {
   messageInput.blur();
   scrollMessagesToLatest();
@@ -620,6 +632,7 @@ messageForm.addEventListener('submit', async (event) => {
   updateTypingStatus(false);
   enqueueOutgoingMessage({ pin: currentPin, content });
   messageInput.value = '';
+  updateCaptureButton();
   messageInput.focus({ preventScroll: true });
   scrollMessagesToLatest();
 });
@@ -644,8 +657,19 @@ choosePhotoButton.addEventListener('click', () => {
 });
 
 takePhotoButton.addEventListener('click', () => {
+  if (messageInput.value.trim()) {
+    messageForm.requestSubmit();
+    return;
+  }
   cameraInput.click();
 });
+
+function updateCaptureButton() {
+  const hasMessage = Boolean(messageInput.value.trim());
+  takePhotoButton.classList.toggle('photo-button--send', hasMessage);
+  takePhotoButton.setAttribute('aria-label', hasMessage ? 'Send message' : 'Take a photo');
+  takePhotoButton.title = hasMessage ? 'Send message' : 'Take a photo';
+}
 
 function handlePhotoSelection(event) {
   const input = event.currentTarget;
@@ -844,6 +868,7 @@ document.addEventListener('pointerdown', (event) => {
 });
 
 messageInput.addEventListener('input', () => {
+  updateCaptureButton();
   const typing = messageInput.value.length > 0;
   window.clearTimeout(typingIdleTimer);
   updateTypingStatus(typing);
@@ -868,3 +893,4 @@ showPinPanel();
 updatePinDots();
 updateNotificationButton();
 updateScrollLatestButton();
+updateCaptureButton();
