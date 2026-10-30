@@ -26,7 +26,9 @@ const typingIndicator = document.querySelector('#typing-indicator');
 const messageForm = document.querySelector('#message-form');
 const messageInput = document.querySelector('#message');
 const photoInput = document.querySelector('#photo-input');
+const cameraInput = document.querySelector('#camera-input');
 const choosePhotoButton = document.querySelector('#choose-photo');
+const takePhotoButton = document.querySelector('#take-photo');
 const scrollLatestButton = document.querySelector('#scroll-latest-button');
 const messagesList = document.querySelector('#messages');
 const quickExitButton = document.querySelector('#quick-exit');
@@ -641,15 +643,20 @@ choosePhotoButton.addEventListener('click', () => {
   photoInput.click();
 });
 
-photoInput.addEventListener('change', () => {
+takePhotoButton.addEventListener('click', () => {
+  cameraInput.click();
+});
+
+function handlePhotoSelection(event) {
+  const input = event.currentTarget;
   if (!currentPin) {
     setStatus('Unlock the chat before sending photos.', true);
-    photoInput.value = '';
+    input.value = '';
     return;
   }
 
   let addedCount = 0;
-  for (const file of photoInput.files ?? []) {
+  for (const file of input.files ?? []) {
     if (!PHOTO_UPLOAD_MIME_TYPES.has(file.type)) {
       setStatus('Choose a JPEG, PNG, WebP, GIF, or HEIC photo.', true);
       continue;
@@ -662,9 +669,12 @@ photoInput.addEventListener('change', () => {
     enqueueOutgoingMessage({ pin: currentPin, content: '', file });
     addedCount += 1;
   }
-  photoInput.value = '';
+  input.value = '';
   if (addedCount) updateTypingStatus(false);
-});
+}
+
+photoInput.addEventListener('change', handlePhotoSelection);
+cameraInput.addEventListener('change', handlePhotoSelection);
 
 async function processOutgoingMessages(pin) {
   if (isProcessingSendQueue) return;

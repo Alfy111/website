@@ -165,6 +165,7 @@ button:disabled {
 }
 
 .chat-panel {
+  position: relative;
   min-height: 0;
   flex: 1;
   display: flex;
@@ -527,6 +528,7 @@ button:disabled {
 }
 
 .message-form {
+  position: relative;
   display: flex;
   gap: 10px;
   padding: 12px 16px max(16px, env(safe-area-inset-bottom));
@@ -566,52 +568,48 @@ button:disabled {
   background: #27272a;
 }
 
-.message-actions {
-  position: relative;
-  flex: 0 0 52px;
-  display: flex;
-  align-items: center;
-}
-
 .message-form button {
   width: 44px;
   min-width: 44px;
   font-size: 20px;
 }
 
-.message-form button[type='submit'] {
-  width: 52px;
-  min-width: 52px;
-  height: 52px;
-  font-size: 24px;
-}
-
-.message-form #scroll-latest-button {
-  width: 52px;
-  min-width: 52px;
-  height: 52px;
-  border: 0;
+.chat-panel > #scroll-latest-button {
+  position: absolute;
+  right: 16px;
+  bottom: calc(73px + max(16px, env(safe-area-inset-bottom)));
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #52525b;
   border-radius: 50%;
   background: #27272a;
   color: #f4f4f5;
   font-size: 24px;
   line-height: 1;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
 }
 
-.message-form #scroll-latest-button:hover {
+.chat-panel > #scroll-latest-button:hover {
   background: #3f3f46;
+}
+
+.chat-panel > #scroll-latest-button:active {
+  transform: scale(0.96);
 }
 
 .message-form .quick-exit-button {
   position: absolute;
   top: -200px;
-  left: 50%;
+  right: 16px;
   z-index: 1;
   width: 56px;
   min-width: 56px;
   height: 56px;
   padding: 0;
-  transform: translateX(-50%);
   border: 1px solid #ef4444;
   border-radius: 50%;
   background: #450a0a;
