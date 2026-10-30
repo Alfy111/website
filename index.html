@@ -3,8 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#09090b" />
-    <title>Our little chat</title>
+    <meta name="theme-color" content="#123f50" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Freeform" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/icons/icon-180.png" />
+    <title>Freeform Chat</title>
   </head>
   <body>
     <main class="chat-shell">
@@ -29,8 +35,13 @@
       <section id="chat-panel" class="chat-panel" aria-label="Conversation" hidden>
         <header class="chat-header">
           <span id="chat-player" class="chat-player"></span>
+          <div class="chat-header-actions">
+            <button id="edit-notification" class="text-button" type="button">Edit alert</button>
+            <button id="toggle-notifications" class="text-button" type="button">Enable alerts</button>
+          </div>
         </header>
         <ol id="messages" class="messages" aria-live="polite" aria-relevant="additions"></ol>
+        <p id="typing-indicator" class="typing-indicator" aria-live="polite" hidden></p>
         <form id="message-form" class="message-form">
           <label class="sr-only" for="message">Write a message</label>
           <input id="message" name="message" maxlength="2000" placeholder="Write a message…" required />

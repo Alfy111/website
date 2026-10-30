@@ -12,6 +12,33 @@ alter table public.chat_messages enable row level security;
 revoke all on public.chat_messages from anon, authenticated;
 grant select, insert on public.chat_messages to service_role;
 
+create table if not exists public.chat_typing (
+  player text primary key check (char_length(player) between 1 and 40),
+  is_typing boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.chat_typing enable row level security;
+revoke all on public.chat_typing from anon, authenticated;
+grant select, insert, update on public.chat_typing to service_role;
+
+create table if not exists public.chat_push_subscriptions (
+  endpoint text primary key check (char_length(endpoint) between 1 and 2048),
+  player text not null check (char_length(player) between 1 and 40),
+  subscription jsonb not null,
+  notification_title text not null default 'Freeform Chat'
+    check (char_length(notification_title) between 1 and 120),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists chat_push_subscriptions_player_idx
+  on public.chat_push_subscriptions (player);
+
+alter table public.chat_push_subscriptions enable row level security;
+revoke all on public.chat_push_subscriptions from anon, authenticated;
+grant select, insert, update, delete on public.chat_push_subscriptions to service_role;
+
 create schema if not exists app_private;
 revoke all on schema app_private from public, anon, authenticated;
 
