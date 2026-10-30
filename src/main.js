@@ -12,6 +12,7 @@ const keypad = document.querySelector('#keypad');
 const chatPanel = document.querySelector('#chat-panel');
 const chatPlayer = document.querySelector('#chat-player');
 const toggleNotificationsButton = document.querySelector('#toggle-notifications');
+const notificationWarning = document.querySelector('#notification-warning');
 const typingIndicator = document.querySelector('#typing-indicator');
 const messageForm = document.querySelector('#message-form');
 const messageInput = document.querySelector('#message');
@@ -22,6 +23,14 @@ const quickExitButton = document.querySelector('#quick-exit');
 const QUICK_EXIT_URL = 'https://www.google.com/search?q=weather';
 const NOTIFICATIONS_ENABLED_KEY = 'chat-notifications-enabled';
 const NOTIFICATION_TITLE = 'Freeform Chat';
+const REACTIONS = {
+  heart: { emoji: '❤️', label: 'Heart' },
+  laugh: { emoji: '😂', label: 'Laugh' },
+  wow: { image: '/icons/wow-reaction.png', label: 'Wow' },
+  sad: { emoji: '😢', label: 'Sad' },
+  angry: { image: '/icons/angry-reaction.png', label: 'Angry' },
+  like: { image: '/icons/like-reaction.png', label: 'Like' },
+};
 let pinDigits = '';
 let currentPin;
 let currentPlayer;
@@ -33,10 +42,16 @@ let currentMessages = [];
 let isTyping = false;
 let notificationsEnabled = localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'true';
 let pushRegistration;
+let longPressTimer;
+let longPressMessage;
+let longPressPointerId;
+let longPressStartX = 0;
+let longPressStartY = 0;
 
-function setStatus(message, isError = false) {
+function setStatus(message, isError = false, isHighlighted = false) {
   status.textContent = message;
   status.dataset.error = String(isError);
+  status.dataset.highlighted = String(isHighlighted);
 }
 
 function updatePinDots() {
@@ -47,6 +62,20 @@ function updatePinDots() {
       return dot;
     }),
   );
+}
+
+function appendReactionIcon(container, details) {
+  if (details.image) {
+    const image = document.createElement('img');
+    image.className = 'reaction-icon';
+    image.src = details.image;
+    image.alt = '';
+    image.setAttribute('aria-hidden', 'true');
+    container.append(image);
+    return;
+  }
+
+  container.append(document.createTextNode(details.emoji));
 }
 
 function showPinPanel() {
@@ -75,7 +104,54 @@ function renderMessage(message) {
     minute: '2-digit',
   });
 
-  item.append(author, body, time);
+  const reactions = message.reactions ?? [];
+  const ownReaction = reactions.find((reaction) => reaction.player === currentPlayer)?.reaction;
+  const reactionControls = document.createElement('div');
+  reactionControls.className = 'message-reaction-controls';
+
+  const reactionPicker = document.createElement('details');
+  reactionPicker.className = 'message-reaction-picker';
+  const reactionOptions = document.createElement('div');
+  reactionOptions.className = 'reaction-options';
+  reactionOptions.setAttribute('role', 'group');
+  reactionOptions.setAttribute('aria-label', 'Choose a reaction');
+
+  for (const [reaction, details] of Object.entries(REACTIONS)) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'reaction-option';
+    button.dataset.messageId = message.id;
+    button.dataset.reaction = reaction;
+    appendReactionIcon(button, details);
+    button.setAttribute('aria-label', details.label);
+    button.setAttribute('aria-pressed', String(ownReaction === reaction));
+    reactionOptions.append(button);
+  }
+
+  reactionPicker.append(reactionOptions);
+  reactionControls.append(reactionPicker);
+
+  const counts = new Map();
+  for (const { reaction } of reactions) {
+    counts.set(reaction, (counts.get(reaction) ?? 0) + 1);
+  }
+  for (const [reaction, count] of counts) {
+    const details = REACTIONS[reaction];
+    if (!details) continue;
+
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `reaction-chip${ownReaction === reaction ? ' reaction-chip--selected' : ''}`;
+    chip.dataset.messageId = message.id;
+    chip.dataset.reaction = reaction;
+    chip.setAttribute('aria-label', `${details.label}: ${count}`);
+    chip.setAttribute('aria-pressed', String(ownReaction === reaction));
+    appendReactionIcon(chip, details);
+    chip.append(document.createTextNode(` ${count}`));
+    reactionControls.append(chip);
+  }
+
+  item.append(author, body, time, reactionControls);
   messagesList.append(item);
 }
 
@@ -113,13 +189,16 @@ async function requestChat(action, pin, content, typing, extra = {}) {
 }
 
 function updateMessages(messages, shouldScroll = false) {
-  const nextIds = messages.map((message) => message.id).join(',');
+  const nextIds = JSON.stringify(messages.map((message) => ({
+    id: message.id,
+    reactions: message.reactions ?? [],
+  })));
+  currentMessages = messages;
   if (nextIds === renderedMessageIds) return;
 
   const wasAtBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 32;
   messagesList.replaceChildren();
   messages.forEach(renderMessage);
-  currentMessages = messages;
   renderedMessageIds = nextIds;
 
   if (shouldScroll || wasAtBottom) {
@@ -128,13 +207,12 @@ function updateMessages(messages, shouldScroll = false) {
 }
 
 function updateNotificationButton() {
-  toggleNotificationsButton.textContent = notificationsEnabled
-    ? 'Push notif enabled'
-    : 'Enable push notif';
+  toggleNotificationsButton.setAttribute('aria-checked', String(notificationsEnabled));
   toggleNotificationsButton.setAttribute(
     'aria-label',
-    notificationsEnabled ? 'Disable push notifications' : 'Enable push notifications',
+    `Push notifications ${notificationsEnabled ? 'on' : 'off'}`,
   );
+  notificationWarning.hidden = !notificationsEnabled;
 }
 
 function updateSendButton() {
@@ -237,7 +315,7 @@ toggleNotificationsButton.addEventListener('click', async () => {
     notificationsEnabled = true;
     localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, 'true');
     updateNotificationButton();
-    setStatus('NOTIFICATIONS ENABLED!!!!!: bebe ko!!! di efas');
+    setStatus('NOTIFICATIONS ENABLED!!!!!: bebe ko!!! di efas', false, true);
   } catch (error) {
     setStatus(`Could not enable push notifications: ${error.message}`, true);
   }
@@ -383,6 +461,94 @@ messageForm.addEventListener('submit', async (event) => {
   } finally {
     button.disabled = false;
   }
+});
+
+messagesList.addEventListener('click', async (event) => {
+  const button = event.target.closest('button[data-message-id][data-reaction]');
+  if (!button || !currentPin) return;
+
+  const { messageId, reaction } = button.dataset;
+  const message = currentMessages.find((item) => item.id === messageId);
+  if (!message) return;
+
+  const selectedReaction = message.reactions?.find((item) => item.player === currentPlayer)?.reaction;
+  button.disabled = true;
+  const pin = currentPin;
+  try {
+    await requestChat('react', pin, undefined, undefined, {
+      messageId,
+      reaction: selectedReaction === reaction ? null : reaction,
+    });
+    if (currentPin === pin) {
+      button.closest('details')?.removeAttribute('open');
+      await syncMessages(pin);
+    }
+  } catch (error) {
+    if (currentPin === pin) setStatus(`Could not react to message: ${error.message}`, true);
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function closeReactionPickers() {
+  messagesList.querySelectorAll('.message-reaction-picker[open]').forEach((picker) => {
+    picker.open = false;
+  });
+}
+
+function openReactionPicker(message) {
+  closeReactionPickers();
+  const picker = message.querySelector('.message-reaction-picker');
+  if (picker) picker.open = true;
+}
+
+function clearLongPress() {
+  window.clearTimeout(longPressTimer);
+  longPressTimer = undefined;
+  longPressMessage = undefined;
+  longPressPointerId = undefined;
+}
+
+messagesList.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0 || event.target.closest('.message-reaction-controls')) return;
+  const message = event.target.closest('.message');
+  if (!message) return;
+
+  clearLongPress();
+  longPressMessage = message;
+  longPressPointerId = event.pointerId;
+  longPressStartX = event.clientX;
+  longPressStartY = event.clientY;
+  longPressTimer = window.setTimeout(() => {
+    if (longPressMessage?.isConnected) openReactionPicker(longPressMessage);
+    clearLongPress();
+  }, 500);
+});
+
+document.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== longPressPointerId) return;
+  if (
+    Math.abs(event.clientX - longPressStartX) > 12 ||
+    Math.abs(event.clientY - longPressStartY) > 12
+  ) {
+    clearLongPress();
+  }
+});
+
+document.addEventListener('pointerup', (event) => {
+  if (event.pointerId === longPressPointerId) clearLongPress();
+});
+document.addEventListener('pointercancel', clearLongPress);
+
+messagesList.addEventListener('contextmenu', (event) => {
+  const message = event.target.closest('.message');
+  if (!message || event.target.closest('.message-reaction-controls')) return;
+  event.preventDefault();
+  openReactionPicker(message);
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (!event.target.closest('.message-reaction-picker')) closeReactionPickers();
 });
 
 messageInput.addEventListener('input', () => {

@@ -59,6 +59,7 @@ Deno.serve(async (request) => {
     body.action !== 'load' &&
     body.action !== 'send' &&
     body.action !== 'typing' &&
+    body.action !== 'react' &&
     body.action !== 'push-config' &&
     body.action !== 'push-subscribe' &&
     body.action !== 'push-unsubscribe'
@@ -146,16 +147,78 @@ Deno.serve(async (request) => {
       return respond({ error: 'Could not load typing status.' }, 500);
     }
 
+    const messages = data.reverse();
+    const messageIds = messages.map((message) => message.id);
+    const { data: reactions, error: reactionsError } = messageIds.length
+      ? await supabase
+        .from('chat_message_reactions')
+        .select('message_id, player, reaction')
+        .in('message_id', messageIds)
+      : { data: [], error: null };
+
+    if (reactionsError) {
+      console.error('Could not load chat reactions:', reactionsError.message);
+      return respond({ error: 'Could not load message reactions.' }, 500);
+    }
+
+    const reactionsByMessage = new Map<string, { player: string; reaction: string }[]>();
+    for (const reaction of reactions) {
+      const messageReactions = reactionsByMessage.get(reaction.message_id) ?? [];
+      messageReactions.push({ player: reaction.player, reaction: reaction.reaction });
+      reactionsByMessage.set(reaction.message_id, messageReactions);
+    }
+
     return respond({
       player,
       typingPlayer: typingState?.player ?? null,
-      messages: data.reverse().map((message) => ({
+      messages: messages.map((message) => ({
         id: message.id,
         player: message.player,
         content: message.content,
         createdAt: message.created_at,
+        reactions: reactionsByMessage.get(message.id) ?? [],
       })),
     });
+  }
+
+  if (body.action === 'react') {
+    const messageId = body.messageId;
+    const reaction = body.reaction;
+    if (
+      typeof messageId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(messageId) ||
+      (reaction !== null &&
+        reaction !== 'heart' &&
+        reaction !== 'laugh' &&
+        reaction !== 'wow' &&
+        reaction !== 'sad' &&
+        reaction !== 'angry' &&
+        reaction !== 'like')
+    ) {
+      return respond({ error: 'Invalid message reaction.' }, 400);
+    }
+
+    const query = supabase
+      .from('chat_message_reactions')
+      .delete()
+      .eq('message_id', messageId)
+      .eq('player', player);
+
+    const { error } = reaction === null
+      ? await query
+      : await supabase
+        .from('chat_message_reactions')
+        .upsert(
+          { message_id: messageId, player, reaction },
+          { onConflict: 'message_id,player' },
+        );
+
+    if (error) {
+      console.error('Could not save chat reaction:', error.message);
+      return respond({ error: 'Could not save message reaction.' }, 500);
+    }
+
+    return respond({});
   }
 
   if (body.action === 'typing') {

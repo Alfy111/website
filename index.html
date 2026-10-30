@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#123f50" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -36,7 +36,22 @@
         <header class="chat-header">
           <span id="chat-player" class="chat-player"></span>
           <div class="chat-header-actions">
-            <button id="toggle-notifications" class="text-button" type="button">Enable push notif</button>
+            <button
+              id="toggle-notifications"
+              class="notification-toggle"
+              type="button"
+              role="switch"
+              aria-checked="false"
+              aria-label="Push notifications"
+            >
+              <span class="notification-toggle-label">Push notifications</span>
+              <span class="notification-toggle-track" aria-hidden="true">
+                <span class="notification-toggle-thumb"></span>
+              </span>
+            </button>
+            <p id="notification-warning" class="notification-warning" role="status" hidden>
+              Push notifications are on. Turn them off when you're busy.
+            </p>
           </div>
         </header>
         <ol id="messages" class="messages" aria-live="polite" aria-relevant="additions"></ol>
