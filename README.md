@@ -40,7 +40,7 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
      created_at timestamptz not null default now(),
      updated_at timestamptz not null default now()
    );
-
+a
    alter table public.chat_push_subscriptions
      add column if not exists notification_pending boolean not null default false,
      add column if not exists notification_clear_token text;
