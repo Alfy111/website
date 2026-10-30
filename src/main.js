@@ -128,7 +128,13 @@ function updateMessages(messages, shouldScroll = false) {
 }
 
 function updateNotificationButton() {
-  toggleNotificationsButton.textContent = notificationsEnabled ? 'Disable alerts' : 'Enable alerts';
+  toggleNotificationsButton.textContent = notificationsEnabled
+    ? 'Push notif enabled'
+    : 'Enable push notif';
+  toggleNotificationsButton.setAttribute(
+    'aria-label',
+    notificationsEnabled ? 'Disable push notifications' : 'Enable push notifications',
+  );
 }
 
 function updateSendButton() {
@@ -231,7 +237,7 @@ toggleNotificationsButton.addEventListener('click', async () => {
     notificationsEnabled = true;
     localStorage.setItem(NOTIFICATIONS_ENABLED_KEY, 'true');
     updateNotificationButton();
-    setStatus('Push notifications enabled on this device.');
+    setStatus('NOTIFICATIONS ENABLED!!!!!: bebe ko!!! di efas');
   } catch (error) {
     setStatus(`Could not enable push notifications: ${error.message}`, true);
   }

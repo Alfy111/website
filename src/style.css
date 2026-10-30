@@ -184,13 +184,13 @@ button:disabled {
   padding: 8px 6px;
   border: 0;
   background: transparent;
-  color: #71717a;
+  color: #ef4444;
   font-size: 11px;
   white-space: nowrap;
 }
 
 .text-button:hover {
-  color: #f4f4f5;
+  color: #fca5a5;
 }
 
 .messages {
