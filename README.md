@@ -57,6 +57,9 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
 
    alter table public.chat_messages
      add column if not exists media_path text,
+     add column if not exists reply_to uuid references public.chat_messages (id) on delete set null,
+     add column if not exists seen_by text,
+     add column if not exists seen_at timestamptz,
      alter column content drop not null,
      alter column content set default '';
 
@@ -66,6 +69,8 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
        (media_path is null and char_length(content) between 1 and 2000) or
        (media_path is not null and char_length(content) between 0 and 2000)
      );
+
+   grant select, insert, update on public.chat_messages to service_role;
 
    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
    values (
@@ -104,6 +109,8 @@ The function rate-limits incorrect PIN attempts by source IP. Four-digit PINs ar
 Chat history is stored in Supabase, so it is available from other devices using the same project and PINs. The browser only keeps the PIN in memory while its chat is unlocked.
 
 Use the photo button beside the message field to select one or more gallery images. Photos are sent through the message queue and stored in a private Supabase Storage bucket; the upload limit is 8 MB per image.
+
+Messages show when the other participant has seen them. Swipe a message to the right to reply; the reply is attached to the sent message and shown as a quoted preview.
 
 On iOS, deploy to HTTPS, open the site in Safari, add it to the Home Screen, open the installed app, unlock the chat, and tap **Enable alerts** to grant push permission and register that device. Repeat on each device. Each incoming message sends its own push notification, so notifications can stack; chat content is not included. Alerts can be disabled independently on each device. Push display also depends on the device's notification and Focus settings.
 

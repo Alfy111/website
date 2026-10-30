@@ -71,6 +71,8 @@ Deno.serve(async (request) => {
     contentType?: unknown;
     paths?: unknown;
     mediaPath?: unknown;
+    replyToId?: unknown;
+    messageIds?: unknown;
     subscription?: unknown;
     endpoint?: unknown;
     notificationTitle?: unknown;
@@ -84,6 +86,7 @@ Deno.serve(async (request) => {
   if (
     body.action !== 'load' &&
     body.action !== 'send' &&
+    body.action !== 'seen' &&
     body.action !== 'typing' &&
     body.action !== 'react' &&
     body.action !== 'photo-upload' &&
@@ -202,6 +205,42 @@ Deno.serve(async (request) => {
     return respond({ photoUrls });
   }
 
+  if (body.action === 'seen') {
+    if (
+      !Array.isArray(body.messageIds) ||
+      body.messageIds.length > 1000 ||
+      body.messageIds.some((id) =>
+        typeof id !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+      )
+    ) {
+      return respond({ error: 'Invalid message IDs for read receipts.' }, 400);
+    }
+    if (!body.messageIds.length) return respond({ seenMessages: [] });
+
+    const seenAt = new Date().toISOString();
+    const { data: seenMessages, error } = await supabase
+      .from('chat_messages')
+      .update({ seen_by: player, seen_at: seenAt })
+      .neq('player', player)
+      .in('id', body.messageIds as string[])
+      .is('seen_at', null)
+      .select('id, seen_by, seen_at');
+
+    if (error) {
+      console.error('Could not mark chat messages as seen:', error.message);
+      return respond({ error: 'Could not update message read status.' }, 500);
+    }
+
+    return respond({
+      seenMessages: seenMessages.map((message) => ({
+        id: message.id,
+        seenBy: message.seen_by,
+        seenAt: message.seen_at,
+      })),
+    });
+  }
+
   if (body.action === 'load') {
     const otherPlayer = body.pin === pin1
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
@@ -210,7 +249,7 @@ Deno.serve(async (request) => {
     const [{ data, error }, { data: typingState, error: typingError }] = await Promise.all([
       supabase
         .from('chat_messages')
-        .select('id, player, content, media_path, created_at')
+        .select('id, player, content, media_path, created_at, seen_by, seen_at, reply_to')
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase
@@ -233,16 +272,27 @@ Deno.serve(async (request) => {
 
     const messages = data.reverse();
     const messageIds = messages.map((message) => message.id);
+    const replyToIds = [...new Set(messages.map((message) => message.reply_to).filter(Boolean))];
     const { data: reactions, error: reactionsError } = messageIds.length
       ? await supabase
         .from('chat_message_reactions')
         .select('message_id, player, reaction')
         .in('message_id', messageIds)
       : { data: [], error: null };
+    const { data: replyParents, error: replyParentsError } = replyToIds.length
+      ? await supabase
+        .from('chat_messages')
+        .select('id, player, content, media_path')
+        .in('id', replyToIds)
+      : { data: [], error: null };
 
     if (reactionsError) {
       console.error('Could not load chat reactions:', reactionsError.message);
       return respond({ error: 'Could not load message reactions.' }, 500);
+    }
+    if (replyParentsError) {
+      console.error('Could not load replied-to messages:', replyParentsError.message);
+      return respond({ error: 'Could not load message replies.' }, 500);
     }
 
     const reactionsByMessage = new Map<string, { player: string; reaction: string }[]>();
@@ -251,6 +301,7 @@ Deno.serve(async (request) => {
       messageReactions.push({ player: reaction.player, reaction: reaction.reaction });
       reactionsByMessage.set(reaction.message_id, messageReactions);
     }
+    const replyParentById = new Map(replyParents.map((message) => [message.id, message]));
 
     return respond({
       player,
@@ -261,6 +312,20 @@ Deno.serve(async (request) => {
         content: message.content,
         mediaPath: message.media_path,
         createdAt: message.created_at,
+        seenBy: message.seen_by,
+        seenAt: message.seen_at,
+        replyTo: message.reply_to
+          ? (() => {
+            const parent = replyParentById.get(message.reply_to);
+            return parent
+              ? {
+                id: parent.id,
+                player: parent.player,
+                content: parent.content || (parent.media_path ? 'Photo' : ''),
+              }
+              : null;
+          })()
+          : null,
         reactions: reactionsByMessage.get(message.id) ?? [],
       })),
     });
@@ -401,11 +466,31 @@ Deno.serve(async (request) => {
 
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   const mediaPath = body.mediaPath === undefined ? null : body.mediaPath;
+  const replyToId = body.replyToId === undefined ? null : body.replyToId;
   if (
     (content.length > 2000 || (!content && !mediaPath)) ||
-    (mediaPath !== null && !isPlayerPhotoPath(mediaPath, player))
+    (mediaPath !== null && !isPlayerPhotoPath(mediaPath, player)) ||
+    (replyToId !== null && (
+      typeof replyToId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(replyToId)
+    ))
   ) {
-    return respond({ error: 'Enter a message or attach a valid photo.' }, 400);
+    return respond({ error: 'Enter a message or attach a valid photo and reply target.' }, 400);
+  }
+
+  let replyParent = null;
+  if (replyToId) {
+    const { data, error: replyError } = await supabase
+      .from('chat_messages')
+      .select('id, player, content, media_path')
+      .eq('id', replyToId)
+      .maybeSingle();
+    if (replyError) {
+      console.error('Could not load replied-to message:', replyError.message);
+      return respond({ error: 'Could not load the message being replied to.' }, 500);
+    }
+    if (!data) return respond({ error: 'The message being replied to no longer exists.' }, 400);
+    replyParent = data;
   }
 
   if (mediaPath) {
@@ -423,8 +508,8 @@ Deno.serve(async (request) => {
 
   const { data: message, error } = await supabase
     .from('chat_messages')
-    .insert({ player, content, media_path: mediaPath })
-    .select('id, player, content, media_path, created_at')
+    .insert({ player, content, media_path: mediaPath, reply_to: replyToId })
+    .select('id, player, content, media_path, created_at, seen_by, seen_at, reply_to')
     .single();
 
   if (error) {
@@ -491,6 +576,15 @@ Deno.serve(async (request) => {
       content: message.content,
       mediaPath: message.media_path,
       createdAt: message.created_at,
+      seenBy: message.seen_by,
+      seenAt: message.seen_at,
+      replyTo: replyParent
+        ? {
+          id: replyParent.id,
+          player: replyParent.player,
+          content: replyParent.content || (replyParent.media_path ? 'Photo' : ''),
+        }
+        : null,
     },
   });
 });

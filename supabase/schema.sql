@@ -3,6 +3,9 @@ create table if not exists public.chat_messages (
   player text not null check (char_length(player) between 1 and 40),
   content text not null default '',
   media_path text,
+  reply_to uuid references public.chat_messages (id) on delete set null,
+  seen_by text,
+  seen_at timestamptz,
   constraint chat_messages_content_check check (
     (media_path is null and char_length(content) between 1 and 2000) or
     (media_path is not null and char_length(content) between 0 and 2000)
@@ -12,6 +15,9 @@ create table if not exists public.chat_messages (
 
 alter table public.chat_messages
   add column if not exists media_path text,
+  add column if not exists reply_to uuid references public.chat_messages (id) on delete set null,
+  add column if not exists seen_by text,
+  add column if not exists seen_at timestamptz,
   alter column content drop not null,
   alter column content set default '';
 
@@ -27,7 +33,7 @@ create index if not exists chat_messages_created_at_idx
 
 alter table public.chat_messages enable row level security;
 revoke all on public.chat_messages from anon, authenticated;
-grant select, insert on public.chat_messages to service_role;
+grant select, insert, update on public.chat_messages to service_role;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values (

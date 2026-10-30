@@ -24,6 +24,10 @@ const toggleNotificationsButton = document.querySelector('#toggle-notifications'
 const notificationWarning = document.querySelector('#notification-warning');
 const typingIndicator = document.querySelector('#typing-indicator');
 const messageForm = document.querySelector('#message-form');
+const replyPreview = document.querySelector('#reply-preview');
+const replyPreviewPlayer = document.querySelector('#reply-preview-player');
+const replyPreviewText = document.querySelector('#reply-preview-text');
+const cancelReplyButton = document.querySelector('#cancel-reply');
 const messageInput = document.querySelector('#message');
 const photoInput = document.querySelector('#photo-input');
 const cameraInput = document.querySelector('#camera-input');
@@ -54,6 +58,7 @@ let typingIdleTimer;
 let renderedMessageIds = '';
 let previousMessagesScrollTop = 0;
 let currentMessages = [];
+let replyingTo;
 let serverMessages = [];
 const outgoingMessages = [];
 const mediaUrlCache = new Map();
@@ -100,6 +105,15 @@ function appendReactionIcon(container, details) {
   container.append(emoji);
 }
 
+function formatSeenTime(value) {
+  return new Date(value).toLocaleString([], {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 function showPinPanel() {
   pinPanel.hidden = false;
   chatPanel.hidden = true;
@@ -108,6 +122,7 @@ function showPinPanel() {
 
 function renderMessage(message, animate = false) {
   const item = document.createElement('li');
+  item.dataset.messageId = message.id;
   item.className = [
     'message',
     ...(message.player === currentPlayer ? ['message--own'] : []),
@@ -117,6 +132,19 @@ function renderMessage(message, animate = false) {
   const author = document.createElement('span');
   author.className = 'message-author';
   author.textContent = message.player;
+
+  if (message.replyTo) {
+    const reply = document.createElement('blockquote');
+    reply.className = 'message-reply';
+    const replyAuthor = document.createElement('span');
+    replyAuthor.className = 'message-reply-author';
+    replyAuthor.textContent = message.replyTo.player;
+    const replyText = document.createElement('span');
+    replyText.className = 'message-reply-text';
+    replyText.textContent = message.replyTo.content || 'Photo';
+    reply.append(replyAuthor, replyText);
+    item.append(reply);
+  }
 
   if (message.mediaUrl || message.previewUrl) {
     const image = document.createElement('img');
@@ -145,6 +173,13 @@ function renderMessage(message, animate = false) {
     hour: 'numeric',
     minute: '2-digit',
   });
+  item.append(time);
+  if (message.player === currentPlayer && message.seenAt && message.seenBy) {
+    const seen = document.createElement('span');
+    seen.className = 'message-seen';
+    seen.textContent = `Seen by ${message.seenBy} · ${formatSeenTime(message.seenAt)}`;
+    item.append(seen);
+  }
 
   let deliveryIndicator;
   if (message.deliveryStatus === 'queued' || message.deliveryStatus === 'sending') {
@@ -216,7 +251,6 @@ function renderMessage(message, animate = false) {
   }
 
   item.prepend(author);
-  item.append(time);
   if (deliveryIndicator) item.append(deliveryIndicator);
   item.append(reactionControls);
   messagesList.append(item);
@@ -302,6 +336,46 @@ async function attachPhotoUrls(messages, pin) {
   }));
 }
 
+async function markMessagesSeen(messages, pin) {
+  if (
+    document.visibilityState !== 'visible' ||
+    !messages.some((message) => message.player !== currentPlayer && !message.seenAt)
+  ) {
+    return messages;
+  }
+
+  const messageIds = messages
+    .filter((message) => message.player !== currentPlayer && !message.seenAt)
+    .map((message) => message.id);
+  const { seenMessages } = await requestChat('seen', pin, undefined, undefined, { messageIds });
+  if (!seenMessages?.length) return messages;
+
+  const receipts = new Map(seenMessages.map((message) => [message.id, message]));
+  return messages.map((message) => {
+    const receipt = receipts.get(message.id);
+    return receipt
+      ? { ...message, seenBy: receipt.seenBy, seenAt: receipt.seenAt }
+      : message;
+  });
+}
+
+function updateReplyPreview(message) {
+  replyingTo = message
+    ? {
+      id: message.id,
+      player: message.player,
+      content: message.content || (message.mediaPath || message.previewUrl ? 'Photo' : ''),
+    }
+    : undefined;
+  replyPreview.hidden = !replyingTo;
+  if (!replyingTo) return;
+  replyPreviewPlayer.textContent = `Replying to ${replyingTo.player}`;
+  replyPreviewText.textContent = replyingTo.content;
+  messageInput.focus({ preventScroll: true });
+}
+
+cancelReplyButton.addEventListener('click', () => updateReplyPreview(null));
+
 function updateMessages(messages, shouldScroll = false, animateNewMessages = true) {
   const previousIds = new Set(currentMessages.map((message) => message.id));
   const nextIds = JSON.stringify(messages.map((message) => ({
@@ -310,6 +384,9 @@ function updateMessages(messages, shouldScroll = false, animateNewMessages = tru
     deliveryStatus: message.deliveryStatus ?? null,
     mediaUrl: message.mediaUrl ?? null,
     previewUrl: message.previewUrl ?? null,
+    seenBy: message.seenBy ?? null,
+    seenAt: message.seenAt ?? null,
+    replyTo: message.replyTo ?? null,
   })));
   currentMessages = messages;
   if (nextIds === renderedMessageIds) return;
@@ -334,6 +411,7 @@ function getVisibleMessages() {
     content: message.content,
     createdAt: message.createdAt,
     reactions: [],
+    replyTo: message.replyTo,
     mediaPath: message.mediaPath,
     previewUrl: message.previewUrl,
     deliveryStatus: message.status,
@@ -377,6 +455,14 @@ messagesList.addEventListener('scroll', () => {
   previousMessagesScrollTop = scrollTop;
   updateScrollLatestButton();
 }, { passive: true });
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && currentPin) {
+    void syncMessages(currentPin).catch((error) => {
+      if (currentPin) setStatus(`Could not sync chat: ${error.message}`, true);
+    });
+  }
+});
 scrollLatestButton.addEventListener('click', () => {
   messageInput.blur();
   scrollMessagesToLatest();
@@ -400,7 +486,9 @@ function updateNotificationButton() {
 async function syncMessages(pin, shouldScroll = false) {
   const result = await requestChat('load', pin);
   if (currentPin !== pin) return;
-  const updatedMessages = await attachPhotoUrls(result.messages, pin);
+  let updatedMessages = await attachPhotoUrls(result.messages, pin);
+  if (currentPin !== pin) return;
+  updatedMessages = await markMessagesSeen(updatedMessages, pin);
   if (currentPin !== pin) return;
   for (const previous of serverMessages) {
     if (
@@ -541,6 +629,7 @@ async function unlockChat(pin) {
     currentPin = pin;
     currentPlayer = result.player;
     serverMessages = await attachPhotoUrls(result.messages, pin);
+    serverMessages = await markMessagesSeen(serverMessages, pin);
     if (currentPin !== pin) return;
     chatPlayer.textContent = result.player;
     messageInput.placeholder = `Message as ${result.player}…`;
@@ -630,19 +719,27 @@ messageForm.addEventListener('submit', async (event) => {
   if (!currentPin) return;
 
   updateTypingStatus(false);
-  enqueueOutgoingMessage({ pin: currentPin, content });
+  enqueueOutgoingMessage({
+    pin: currentPin,
+    content,
+    replyToId: replyingTo?.id,
+    replyTo: replyingTo,
+  });
+  updateReplyPreview(null);
   messageInput.value = '';
   updateCaptureButton();
   messageInput.focus({ preventScroll: true });
   scrollMessagesToLatest();
 });
 
-function enqueueOutgoingMessage({ pin, content, file }) {
+function enqueueOutgoingMessage({ pin, content, file, replyToId, replyTo }) {
   outgoingMessages.push({
     id: `pending-${crypto.randomUUID()}`,
     pin,
     content,
     file,
+    replyToId,
+    replyTo,
     mediaPath: undefined,
     previewUrl: file ? URL.createObjectURL(file) : undefined,
     createdAt: new Date().toISOString(),
@@ -690,11 +787,20 @@ function handlePhotoSelection(event) {
       continue;
     }
 
-    enqueueOutgoingMessage({ pin: currentPin, content: '', file });
+    enqueueOutgoingMessage({
+      pin: currentPin,
+      content: '',
+      file,
+      replyToId: replyingTo?.id,
+      replyTo: replyingTo,
+    });
     addedCount += 1;
   }
   input.value = '';
-  if (addedCount) updateTypingStatus(false);
+  if (addedCount) {
+    updateReplyPreview(null);
+    updateTypingStatus(false);
+  }
 }
 
 photoInput.addEventListener('change', handlePhotoSelection);
@@ -726,7 +832,10 @@ async function processOutgoingMessages(pin) {
           pin,
           queuedMessage.content,
           undefined,
-          queuedMessage.mediaPath ? { mediaPath: queuedMessage.mediaPath } : {},
+          {
+            ...(queuedMessage.mediaPath ? { mediaPath: queuedMessage.mediaPath } : {}),
+            ...(queuedMessage.replyToId ? { replyToId: queuedMessage.replyToId } : {}),
+          },
         );
         outgoingMessages.splice(outgoingMessages.indexOf(queuedMessage), 1);
         if (currentPin === pin && !serverMessages.some((message) => message.id === result.message.id)) {
@@ -855,6 +964,57 @@ document.addEventListener('pointerup', (event) => {
   if (event.pointerId === longPressPointerId) clearLongPress();
 });
 document.addEventListener('pointercancel', clearLongPress);
+
+let swipeMessage;
+let swipePointerId;
+let swipeStartX = 0;
+let swipeStartY = 0;
+
+messagesList.addEventListener('pointerdown', (event) => {
+  if (event.pointerType !== 'touch' || event.target.closest('.message-reaction-controls')) return;
+  const element = event.target.closest('.message');
+  if (!element || element.dataset.messageId.startsWith('pending-')) return;
+  swipeMessage = element;
+  swipePointerId = event.pointerId;
+  swipeStartX = event.clientX;
+  swipeStartY = event.clientY;
+});
+
+document.addEventListener('pointermove', (event) => {
+  if (event.pointerId !== swipePointerId || !swipeMessage?.isConnected) return;
+  const deltaX = event.clientX - swipeStartX;
+  const deltaY = event.clientY - swipeStartY;
+  if (deltaX > 0 && Math.abs(deltaX) > Math.abs(deltaY)) {
+    swipeMessage.style.transform = `translateX(${Math.min(deltaX, 76)}px)`;
+  } else if (Math.abs(deltaY) > 12) {
+    swipeMessage = undefined;
+    swipePointerId = undefined;
+  }
+});
+
+function finishReplySwipe(event) {
+  if (event.pointerId !== swipePointerId) return;
+  const element = swipeMessage;
+  const deltaX = event.clientX - swipeStartX;
+  const deltaY = event.clientY - swipeStartY;
+  if (element) {
+    element.style.transform = '';
+    if (deltaX >= 64 && deltaX > Math.abs(deltaY) * 1.25) {
+      const message = currentMessages.find((item) => item.id === element.dataset.messageId);
+      if (message) updateReplyPreview(message);
+    }
+  }
+  swipeMessage = undefined;
+  swipePointerId = undefined;
+}
+
+document.addEventListener('pointerup', finishReplySwipe);
+document.addEventListener('pointercancel', (event) => {
+  if (event.pointerId !== swipePointerId) return;
+  if (swipeMessage) swipeMessage.style.transform = '';
+  swipeMessage = undefined;
+  swipePointerId = undefined;
+});
 
 messagesList.addEventListener('contextmenu', (event) => {
   const message = event.target.closest('.message');
