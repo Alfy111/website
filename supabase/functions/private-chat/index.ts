@@ -247,7 +247,14 @@ Deno.serve(async (request) => {
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
     const typingSince = new Date(Date.now() - 5000).toISOString();
-    const [{ data, error }, { data: typingState, error: typingError }] = await Promise.all([
+    const { error: presenceUpdateError } = await supabase
+      .from('chat_presence')
+      .upsert({ player, updated_at: new Date().toISOString() }, { onConflict: 'player' });
+    const [
+      { data, error },
+      { data: typingState, error: typingError },
+      { data: peerPresence, error: presenceError },
+    ] = await Promise.all([
       supabase
         .from('chat_messages')
         .select('id, player, content, media_path, created_at, seen_by, seen_at, reply_to')
@@ -260,6 +267,11 @@ Deno.serve(async (request) => {
         .eq('is_typing', true)
         .gt('updated_at', typingSince)
         .maybeSingle(),
+      supabase
+        .from('chat_presence')
+        .select('updated_at')
+        .eq('player', otherPlayer)
+        .maybeSingle(),
     ]);
 
     if (error) {
@@ -269,6 +281,11 @@ Deno.serve(async (request) => {
     if (typingError) {
       console.error('Could not load chat typing status:', typingError.message);
       return respond({ error: 'Could not load typing status.' }, 500);
+    }
+    if (presenceUpdateError || presenceError) {
+      console.error('Could not update or load chat presence:',
+        (presenceUpdateError || presenceError)?.message);
+      return respond({ error: 'Could not load account presence.' }, 500);
     }
 
     const messages = data.reverse();
@@ -308,6 +325,7 @@ Deno.serve(async (request) => {
       player,
       otherPlayer,
       typingPlayer: typingState?.player ?? null,
+      peerPresenceUpdatedAt: peerPresence?.updated_at ?? null,
       messages: messages.map((message) => ({
         id: message.id,
         player: message.player,

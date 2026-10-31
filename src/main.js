@@ -20,6 +20,7 @@ const pinDots = document.querySelector('#pin-dots');
 const keypad = document.querySelector('#keypad');
 const chatPanel = document.querySelector('#chat-panel');
 const chatPlayer = document.querySelector('#chat-player');
+const chatPresence = document.querySelector('#chat-presence');
 const chatToolsPage = document.querySelector('#chat-tools-page');
 const chatToolsTitle = document.querySelector('#chat-tools-title');
 const searchPage = document.querySelector('#search-page');
@@ -73,6 +74,7 @@ let pinDigits = '';
 let currentPin;
 let currentPlayer;
 let syncTimer;
+let presenceTimer;
 let typingHeartbeatTimer;
 let typingIdleTimer;
 let renderedMessageIds = '';
@@ -732,17 +734,53 @@ function localDateKey(date) {
   return `${year}-${month}-${day}`;
 }
 
+let peerPresenceUpdatedAt;
+
+function updatePresence(presenceUpdatedAt) {
+  if (!currentPeer || !chatPresence) return;
+  if (presenceUpdatedAt !== undefined) {
+    peerPresenceUpdatedAt = presenceUpdatedAt;
+  }
+
+  const dot = document.createElement('span');
+  dot.className = 'chat-presence-dot';
+  dot.setAttribute('aria-hidden', 'true');
+  const label = document.createElement('span');
+
+  const elapsedSeconds = peerPresenceUpdatedAt
+    ? Math.max(0, Math.floor((Date.now() - new Date(peerPresenceUpdatedAt).getTime()) / 1000))
+    : Number.POSITIVE_INFINITY;
+  const isOnline = Number.isFinite(elapsedSeconds) && elapsedSeconds < 20;
+
+  chatPresence.classList.toggle('chat-presence--online', isOnline);
+  if (isOnline) {
+    label.textContent = 'Active now';
+  } else if (Number.isFinite(elapsedSeconds)) {
+    label.textContent = `Active ${formatActiveAgo(elapsedSeconds)} ago`;
+  } else {
+    label.textContent = 'Inactive';
+  }
+
+  chatPresence.replaceChildren(dot, label);
+  chatPresence.title = currentPeer;
+}
+
+function formatActiveAgo(elapsedSeconds) {
+  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+  const minutes = Math.floor(elapsedSeconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}d`;
+}
+
 function updateChatStats() {
   if (!currentPlayer || !currentPeer) return;
-  const today = localDateKey(new Date());
-  const todayCounts = new Map([[currentPlayer, 0], [currentPeer, 0]]);
   const activePlayersByDay = new Map();
   for (const message of serverMessages) {
     const sentAt = new Date(message.createdAt);
     const day = localDateKey(sentAt);
-    if (day === today) {
-      todayCounts.set(message.player, (todayCounts.get(message.player) ?? 0) + 1);
-    }
     const activePlayers = activePlayersByDay.get(day) ?? new Set();
     activePlayers.add(message.player);
     activePlayersByDay.set(day, activePlayers);
@@ -765,8 +803,7 @@ function updateChatStats() {
     }
   }
 
-  chatStats.textContent =
-    `${currentPlayer} sent ${todayCounts.get(currentPlayer)} · ${currentPeer} sent ${todayCounts.get(currentPeer)} today · ${streak}-day streak`;
+  chatStats.textContent = `🔥 ${streak}-day streak`;
 }
 
 function getVisibleMessages() {
@@ -882,6 +919,7 @@ async function syncMessages(pin, shouldScroll = false) {
   serverMessages = updatedMessages;
   updateChatStats();
   refreshVisibleMessages(shouldScroll);
+  updatePresence(result.peerPresenceUpdatedAt);
   typingIndicator.textContent = result.typingPlayer ? `${result.typingPlayer} is typing` : '';
   typingIndicator.classList.toggle('is-typing', Boolean(result.typingPlayer));
   typingIndicator.hidden = !result.typingPlayer;
@@ -1032,7 +1070,9 @@ async function unlockChat(pin) {
     serverMessages = await attachPhotoUrls(result.messages, pin);
     serverMessages = await markMessagesSeen(serverMessages, pin);
     if (currentPin !== pin) return;
-    chatPlayer.textContent = result.player;
+    chatPlayer.textContent = result.otherPlayer;
+    chatPlayer.setAttribute('aria-label', `Open ${result.otherPlayer}'s chat tools`);
+    updatePresence(result.peerPresenceUpdatedAt);
     updateChatStats();
     messageInput.placeholder = `Message as ${result.player}…`;
     typingIndicator.hidden = true;
@@ -1055,6 +1095,10 @@ async function unlockChat(pin) {
         if (currentPin === pin) setStatus(`Could not sync chat: ${error.message}`, true);
       });
     }, SYNC_INTERVAL_MS);
+    window.clearInterval(presenceTimer);
+    presenceTimer = window.setInterval(() => {
+      updatePresence();
+    }, 1000);
     if (notificationsEnabled) {
       void reconcilePushNotifications(pin);
     }
@@ -1723,6 +1767,7 @@ messageInput.addEventListener('paste', (event) => {
 
 function quickExit() {
   window.clearInterval(syncTimer);
+  window.clearInterval(presenceTimer);
   updateTypingStatus(false);
   window.location.replace(QUICK_EXIT_URL);
 }
