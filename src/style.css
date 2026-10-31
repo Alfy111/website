@@ -233,7 +233,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -346,7 +346,7 @@ button:disabled {
 }
 
 .search-page > .message-tools {
-  padding-top: max(60px, env(safe-area-inset-top));
+  padding-top: max(100px, env(safe-area-inset-top));
 }
 
 .message-tools[hidden] {
@@ -1244,7 +1244,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -1320,7 +1320,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
