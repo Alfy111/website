@@ -138,32 +138,19 @@ function getPinSentBaselines() {
   return readJsonStorage(PIN_SENT_BASELINES_KEY);
 }
 
-function updatePinSentCounts(counts, clearViewedCounter = false) {
+function updatePinSentCounts(counts) {
   if (counts?.x !== undefined || counts?.y !== undefined) {
     const totals = { ...getPinSentTotals(), ...counts };
     localStorage.setItem(PIN_SENT_TOTALS_KEY, JSON.stringify(totals));
-
-    if (clearViewedCounter && currentPlayer) {
-      const playerName = String(currentPlayer).toLowerCase();
-      const viewedAlias = playerName.includes('alfey') ? 'y' : playerName.includes('ashy') ? 'x' : null;
-      if (viewedAlias) {
-        const baselines = getPinSentBaselines();
-        baselines[viewedAlias] = Number(totals[viewedAlias] ?? 0);
-        localStorage.setItem(PIN_SENT_BASELINES_KEY, JSON.stringify(baselines));
-      }
-    }
   }
   renderPinSentCounts();
 }
 
 function renderPinSentCounts() {
   const totals = getPinSentTotals();
-  const baselines = getPinSentBaselines();
   for (const alias of ['x', 'y']) {
     const total = Number(totals[alias] ?? 0);
-    const baseline = Number(baselines[alias] ?? 0);
-    const count = Math.max(0, total - baseline);
-    pinSentCounts.querySelector(`[data-pin-count="${alias}"]`).textContent = String(count);
+    pinSentCounts.querySelector(`[data-pin-count="${alias}"]`).textContent = String(total);
   }
 }
 
@@ -1274,11 +1261,11 @@ async function unlockChat(pin) {
   setStatus('Checking PIN…');
 
   try {
-    const result = await requestChat('load', pin, undefined, undefined, { limit: 50 });
+    const result = await requestChat('load', pin, undefined, undefined, { limit: 50, markViewed: true });
     currentPin = pin;
     currentPlayer = result.player;
     currentPeer = result.otherPlayer;
-    updatePinSentCounts(result.sentCounts, true);
+    updatePinSentCounts(result.sentCounts);
     hasOlderMessages = result.hasOlder === true;
     serverMessages = await attachPhotoUrls(result.messages, pin);
     serverMessages = await markMessagesSeen(serverMessages, pin);

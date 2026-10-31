@@ -321,6 +321,8 @@ Deno.serve(async (request) => {
     const otherPlayer = body.pin === pin1
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
+    const player1 = Deno.env.get('CHAT_PLAYER_1') || 'ashy';
+    const player2 = Deno.env.get('CHAT_PLAYER_2') || 'alfey';
     const typingSince = new Date(Date.now() - 5000).toISOString();
     const requestedLimit = Number(body.limit);
     const limit = Number.isInteger(requestedLimit)
@@ -384,6 +386,45 @@ Deno.serve(async (request) => {
     const { error: presenceUpdateError } = await supabase
       .from('chat_presence')
       .upsert({ player, is_active: true, updated_at: new Date().toISOString() }, { onConflict: 'player' });
+    if (body.markViewed === true) {
+      const viewedAt = new Date().toISOString();
+      const { error: readStateError } = await supabase
+        .from('chat_sent_read_state')
+        .upsert({
+          viewer_player: player,
+          last_viewed_at: viewedAt,
+          updated_at: viewedAt,
+        }, { onConflict: 'viewer_player' });
+      if (readStateError) {
+        console.error('Could not save sent-message read state:', readStateError.message);
+        return respond({ error: 'Could not update sent-message counts.' }, 500);
+      }
+    }
+    const { data: readStates, error: readStatesError } = await supabase
+      .from('chat_sent_read_state')
+      .select('viewer_player, last_viewed_at')
+      .in('viewer_player', [player1, player2]);
+    if (readStatesError) {
+      console.error('Could not load sent-message read state:', readStatesError.message);
+      return respond({ error: 'Could not load sent-message counts.' }, 500);
+    }
+    const readStateByViewer = new Map(
+      (readStates ?? []).map((state) => [state.viewer_player, state.last_viewed_at]),
+    );
+    let xCountQuery = supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('player', player2);
+    let yCountQuery = supabase
+      .from('chat_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('player', player1);
+    if (readStateByViewer.has(player1)) {
+      xCountQuery = xCountQuery.gt('created_at', String(readStateByViewer.get(player1)));
+    }
+    if (readStateByViewer.has(player2)) {
+      yCountQuery = yCountQuery.gt('created_at', String(readStateByViewer.get(player2)));
+    }
     const [
       { data, error },
       { data: typingState, error: typingError },
@@ -404,14 +445,8 @@ Deno.serve(async (request) => {
         .select('is_active, updated_at')
         .eq('player', otherPlayer)
         .maybeSingle(),
-      supabase
-        .from('chat_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('player', Deno.env.get('CHAT_PLAYER_2') || 'alfey'),
-      supabase
-        .from('chat_messages')
-        .select('id', { count: 'exact', head: true })
-        .eq('player', Deno.env.get('CHAT_PLAYER_1') || 'ashy'),
+      xCountQuery,
+      yCountQuery,
     ]);
 
     if (error) {
