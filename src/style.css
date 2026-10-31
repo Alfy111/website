@@ -687,6 +687,14 @@ body.body--message-actions-open {
   border-radius: 14px 14px 4px 14px;
 }
 
+.message-footer {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .message-author {
   display: block;
   margin-bottom: 3px;
@@ -756,6 +764,8 @@ body.body--message-actions-open {
 }
 
 .message--own .message-seen {
+  width: max-content;
+  margin-left: auto;
   text-align: right;
 }
 

@@ -121,6 +121,7 @@ let serverSearchResults = [];
 let searchRequestTimer;
 let editingMessageId = null;
 let currentNote = '';
+let statusClearTimer;
 function setStatus(message, isError = false, isHighlighted = false) {
   if (chatPanel.hidden) {
     pinPanel.after(status);
@@ -318,12 +319,19 @@ function renderMessage(message, animate = false, showSeen = false) {
     hour: 'numeric',
     minute: '2-digit',
   });
-  item.append(time);
-  if (showSeen && message.seenAt && message.seenBy) {
-    const seen = document.createElement('span');
-    seen.className = 'message-seen';
-    seen.textContent = `Seen by ${message.seenBy} · ${formatSeenTime(message.seenAt)}`;
-    item.append(seen);
+  if (message.player === currentPlayer) {
+    const footer = document.createElement('div');
+    footer.className = 'message-footer';
+    footer.append(time);
+    if (showSeen && message.seenAt && message.seenBy) {
+      const seen = document.createElement('span');
+      seen.className = 'message-seen';
+      seen.textContent = `Seen by ${message.seenBy} · ${formatSeenTime(message.seenAt)}`;
+      footer.append(seen);
+    }
+    item.append(footer);
+  } else {
+    item.append(time);
   }
 
   let deliveryIndicator;
@@ -1980,6 +1988,12 @@ noteEditor.addEventListener('submit', async (event) => {
     noteEditor.hidden = true;
     openNoteEditor.hidden = false;
     setStatus(note ? 'Note saved.' : 'Note removed.');
+    window.clearTimeout(statusClearTimer);
+    statusClearTimer = window.setTimeout(() => {
+      if (status.textContent === 'Note saved.' || status.textContent === 'Note removed.') {
+        setStatus('');
+      }
+    }, 5000);
   } catch (error) {
     setStatus(`Could not save note: ${error.message}`, true);
   } finally {
