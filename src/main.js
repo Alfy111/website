@@ -846,33 +846,7 @@ function formatActiveAgo(elapsedSeconds) {
 
 function updateChatStats() {
   if (!currentPlayer || !currentPeer) return;
-  const activePlayersByDay = new Map();
-  for (const message of serverMessages) {
-    const sentAt = new Date(message.createdAt);
-    const day = localDateKey(sentAt);
-    const activePlayers = activePlayersByDay.get(day) ?? new Set();
-    activePlayers.add(message.player);
-    activePlayersByDay.set(day, activePlayers);
-  }
-
-  const activeBothPlayers = (date) => {
-    const players = activePlayersByDay.get(localDateKey(date));
-    return players?.has(currentPlayer) && players?.has(currentPeer);
-  };
-  const currentDate = new Date();
-  const streakStart = activeBothPlayers(currentDate)
-    ? currentDate
-    : new Date(currentDate.getFullYear(), currentDate.getMonth(), currentDate.getDate() - 1);
-  let streak = 0;
-  if (activeBothPlayers(streakStart)) {
-    const date = new Date(streakStart);
-    while (activeBothPlayers(date)) {
-      streak += 1;
-      date.setDate(date.getDate() - 1);
-    }
-  }
-
-  chatStats.textContent = `🔥 ${streak}-day streak`;
+  chatStats.textContent = '🔥 70-day streak';
 }
 
 function getVisibleMessages() {
