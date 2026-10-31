@@ -138,12 +138,12 @@ function getPinSentBaselines() {
   return readJsonStorage(PIN_SENT_BASELINES_KEY);
 }
 
-function updatePinSentCounts(counts) {
+function updatePinSentCounts(counts, clearViewedCounter = false) {
   if (counts?.x !== undefined || counts?.y !== undefined) {
     const totals = { ...getPinSentTotals(), ...counts };
     localStorage.setItem(PIN_SENT_TOTALS_KEY, JSON.stringify(totals));
 
-    if (currentPlayer) {
+    if (clearViewedCounter && currentPlayer) {
       const playerName = String(currentPlayer).toLowerCase();
       const viewedAlias = playerName.includes('alfey') ? 'y' : playerName.includes('ashy') ? 'x' : null;
       if (viewedAlias) {
@@ -1278,7 +1278,7 @@ async function unlockChat(pin) {
     currentPin = pin;
     currentPlayer = result.player;
     currentPeer = result.otherPlayer;
-    updatePinSentCounts(result.sentCounts);
+    updatePinSentCounts(result.sentCounts, true);
     hasOlderMessages = result.hasOlder === true;
     serverMessages = await attachPhotoUrls(result.messages, pin);
     serverMessages = await markMessagesSeen(serverMessages, pin);
