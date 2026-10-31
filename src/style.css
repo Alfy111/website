@@ -233,7 +233,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(80px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -346,7 +346,7 @@ button:disabled {
 }
 
 .search-page > .message-tools {
-  padding-top: max(100px, env(safe-area-inset-top));
+  padding-top: max(80px, env(safe-area-inset-top));
 }
 
 .message-tools[hidden] {
@@ -639,18 +639,19 @@ button:disabled {
 }
 
 .message-seen {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 5px);
-  z-index: 1;
   display: none;
   max-width: min(250px, 70vw);
+  margin-top: 4px;
   overflow: hidden;
   color: #a1a1aa;
   font-size: 10px;
-  text-align: right;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.message--own .message-seen {
+  text-align: right;
 }
 
 .message {
@@ -1244,7 +1245,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(80px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -1320,7 +1321,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(100px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(80px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 

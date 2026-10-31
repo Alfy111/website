@@ -255,7 +255,7 @@ function renderMessage(message, animate = false, showSeen = false) {
     const seen = document.createElement('span');
     seen.className = 'message-seen';
     seen.textContent = `Seen by ${message.seenBy} · ${formatSeenTime(message.seenAt)}`;
-    item.prepend(seen);
+    item.append(seen);
   }
 
   let deliveryIndicator;
