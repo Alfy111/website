@@ -145,7 +145,7 @@ function updatePinSentCounts(counts) {
 
     if (currentPlayer) {
       const playerName = String(currentPlayer).toLowerCase();
-      const viewedAlias = playerName.includes('alfie') ? 'y' : playerName.includes('ashy') ? 'x' : null;
+      const viewedAlias = playerName.includes('alfey') ? 'y' : playerName.includes('ashy') ? 'x' : null;
       if (viewedAlias) {
         const baselines = getPinSentBaselines();
         baselines[viewedAlias] = Number(totals[viewedAlias] ?? 0);

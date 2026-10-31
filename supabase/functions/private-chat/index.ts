@@ -123,11 +123,11 @@ Deno.serve(async (request) => {
   const player = body.pin === pin1
     ? (Deno.env.get('CHAT_PLAYER_1') || 'ashy')
     : body.pin === pin2
-      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
+      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : undefined;
   const allowedPhotoPlayers = [
     Deno.env.get('CHAT_PLAYER_1') || 'ashy',
-    Deno.env.get('CHAT_PLAYER_2') || 'alfie',
+    Deno.env.get('CHAT_PLAYER_2') || 'alfey',
   ];
 
   const supabase = createClient(url, serviceKey, {
@@ -319,7 +319,7 @@ Deno.serve(async (request) => {
 
   if (body.action === 'load') {
     const otherPlayer = body.pin === pin1
-      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
+      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
     const typingSince = new Date(Date.now() - 5000).toISOString();
     const requestedLimit = Number(body.limit);
@@ -407,7 +407,7 @@ Deno.serve(async (request) => {
       supabase
         .from('chat_messages')
         .select('id', { count: 'exact', head: true })
-        .eq('player', Deno.env.get('CHAT_PLAYER_2') || 'alfie'),
+        .eq('player', Deno.env.get('CHAT_PLAYER_2') || 'alfey'),
       supabase
         .from('chat_messages')
         .select('id', { count: 'exact', head: true })
@@ -720,7 +720,7 @@ Deno.serve(async (request) => {
   }
 
   const recipientPlayer = body.pin === pin1
-    ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
+    ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
     : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
   const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
