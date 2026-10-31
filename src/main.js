@@ -197,7 +197,7 @@ function renderMessage(message, animate = false, showSeen = false) {
     'message',
     ...(message.player === currentPlayer ? ['message--own'] : []),
     ...(message.id === activeActionMessageId ? ['message--focused'] : []),
-    ...(showSeen ? ['message--last-own'] : []),
+    ...(showSeen ? ['message--last'] : []),
     ...(message.mediaUrl || message.previewUrl ? ['message--has-photo'] : []),
     ...((message.mediaUrl || message.previewUrl) && !message.content ? ['message--photo-only'] : []),
     ...(animate ? ['message--entering'] : []),
@@ -251,7 +251,7 @@ function renderMessage(message, animate = false, showSeen = false) {
     minute: '2-digit',
   });
   item.append(time);
-  if (message.seenAt && message.seenBy) {
+  if (showSeen && message.seenAt && message.seenBy) {
     const seen = document.createElement('span');
     seen.className = 'message-seen';
     seen.textContent = `Seen by ${message.seenBy} · ${formatSeenTime(message.seenAt)}`;
@@ -497,8 +497,10 @@ function updateMessages(messages, shouldScroll = false, animateNewMessages = tru
 
   const wasAtBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 32;
   messagesList.replaceChildren();
-  const latestOwnMessageId = [...messages].reverse()
-    .find((message) => message.player === currentPlayer)?.id;
+  const latestMessage = messages.at(-1);
+  const latestOwnMessageId = latestMessage?.player === currentPlayer
+    ? latestMessage.id
+    : undefined;
   if (!messages.length) {
     const emptyState = document.createElement('li');
     emptyState.className = 'messages-empty';

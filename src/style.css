@@ -233,7 +233,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  padding: 10px 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -653,7 +653,7 @@ button:disabled {
   transition: transform 160ms ease;
 }
 
-.message--last-own .message-seen {
+.message--last .message-seen {
   display: block;
 }
 
