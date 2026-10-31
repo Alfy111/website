@@ -16,7 +16,6 @@ const PHOTO_EXTENSIONS: Record<string, string> = {
   'image/heic': 'heic',
   'image/heif': 'heif',
 };
-
 function respond(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -305,6 +304,7 @@ Deno.serve(async (request) => {
 
     return respond({
       player,
+      otherPlayer,
       typingPlayer: typingState?.player ?? null,
       messages: messages.map((message) => ({
         id: message.id,
@@ -335,15 +335,16 @@ Deno.serve(async (request) => {
     const messageId = body.messageId;
     const reaction = body.reaction;
     const enabled = body.enabled;
+    const isBuiltInReaction = reaction === 'heart' ||
+      reaction === 'laugh' ||
+      reaction === 'wow' ||
+      reaction === 'sad' ||
+      reaction === 'angry' ||
+      reaction === 'like';
     if (
       typeof messageId !== 'string' ||
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(messageId) ||
-      (reaction !== 'heart' &&
-        reaction !== 'laugh' &&
-        reaction !== 'wow' &&
-        reaction !== 'sad' &&
-        reaction !== 'angry' &&
-        reaction !== 'like') ||
+      !isBuiltInReaction ||
       typeof enabled !== 'boolean'
     ) {
       return respond({ error: 'Invalid message reaction.' }, 400);

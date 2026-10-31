@@ -40,7 +40,10 @@
 
       <section id="chat-panel" class="chat-panel" aria-label="Conversation" hidden>
         <header class="chat-header">
-          <span id="chat-player" class="chat-player"></span>
+          <div class="chat-heading">
+            <button id="chat-player" class="chat-player" type="button" aria-label="Open chat tools"></button>
+            <p id="chat-stats" class="chat-stats" aria-live="polite"></p>
+          </div>
           <div class="chat-header-actions">
             <button
               id="toggle-notifications"
@@ -55,9 +58,6 @@
                 <span class="notification-toggle-thumb"></span>
               </span>
             </button>
-            <p id="notification-warning" class="notification-warning" role="status" hidden>
-              Push notifications are on. Turn them off when you're busy.
-            </p>
           </div>
         </header>
         <ol id="messages" class="messages" aria-live="polite" aria-relevant="additions"></ol>
@@ -69,6 +69,9 @@
           </div>
           <button id="cancel-reply" type="button" aria-label="Cancel reply">×</button>
         </section>
+        <p id="notification-warning" class="notification-warning" role="status" hidden>
+          Push notifications are on · turn them off when you're busy.
+        </p>
         <form id="message-form" class="message-form">
           <label class="sr-only" for="message">Write a message</label>
           <input id="message" name="message" maxlength="2000" placeholder="Write a message…" />
@@ -90,11 +93,85 @@
               <path d="M2.4 3.2a.8.8 0 0 0-1.1 1L5 11l9 1-9 1-3.7 6.8a.8.8 0 0 0 1.1 1L23 12 2.4 3.2Z" />
             </svg>
           </button>
-          <button id="quick-exit" class="quick-exit-button" type="button" aria-label="Quick exit to Google Search" title="Quick exit">×</button>
         </form>
         <button id="scroll-latest-button" type="button" aria-label="Scroll to latest message" title="Scroll to latest message" aria-hidden="true" tabindex="-1">
           <span aria-hidden="true">↓</span>
         </button>
+        <button id="quick-exit" class="quick-exit-button" type="button" aria-label="Quick exit to Google Search" title="Drag to move · click to exit">×</button>
+        <section id="chat-tools-page" class="chat-tools-page" aria-label="Chat tools" hidden>
+          <header class="chat-tools-header">
+            <button id="close-chat-tools" class="photo-album-back" type="button" aria-label="Back to chat">‹</button>
+            <div>
+              <h2 id="chat-tools-title"></h2>
+              <p>Chat tools</p>
+            </div>
+          </header>
+          <div class="chat-tools-actions">
+            <button id="open-search" class="chat-tool-action" type="button">
+              <span class="chat-tool-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="10.8" cy="10.8" r="6.8"></circle>
+                  <path d="m16 16 4.5 4.5"></path>
+                </svg>
+              </span>
+              <span>Search messages</span>
+            </button>
+            <button id="open-photo-album" class="chat-tool-action" type="button">
+              <span class="chat-tool-icon chat-tool-icon--photos" aria-hidden="true">▦</span>
+              <span>Photos</span>
+              <span id="chat-tool-photo-count" class="chat-tool-count"></span>
+            </button>
+          </div>
+        </section>
+        <section id="search-page" class="search-page" aria-label="Search messages" hidden>
+          <div id="search-toolbar" class="message-tools">
+            <label class="sr-only" for="message-search">Search messages</label>
+            <input id="message-search" type="search" placeholder="Search messages…" autocomplete="off" />
+            <div class="search-result-controls">
+              <output id="search-results" class="search-results" aria-live="polite">Search messages</output>
+              <button id="previous-search-result" class="search-result-nav" type="button" aria-label="Previous search result" title="Previous result" disabled>↑</button>
+              <button id="next-search-result" class="search-result-nav" type="button" aria-label="Next search result" title="Next result" disabled>↓</button>
+              <button id="close-search" class="search-result-nav search-close" type="button" aria-label="Close search" title="Close search">×</button>
+            </div>
+          </div>
+          <ol id="search-result-list" class="search-result-list" aria-live="polite"></ol>
+        </section>
+        <section id="photo-album" class="photo-album" aria-label="Photo album" hidden>
+          <header class="photo-album-header">
+            <button id="close-photo-album" class="photo-album-back" type="button" aria-label="Back to chat">‹</button>
+            <div>
+              <h2>Photos</h2>
+              <p id="photo-album-count" class="photo-album-count"></p>
+            </div>
+          </header>
+          <div id="photo-album-grid" class="photo-album-grid"></div>
+        </section>
+        <section id="message-actions" class="message-actions" aria-label="Message actions" hidden>
+          <button id="message-actions-backdrop" class="message-actions-backdrop" type="button" aria-label="Close message actions"></button>
+          <div class="message-actions-buttons">
+            <button id="reply-to-message" type="button">Reply</button>
+            <button id="copy-message" type="button">Copy</button>
+          </div>
+        </section>
+        <section id="photo-review" class="photo-review" aria-label="Review photos" hidden>
+          <button id="photo-review-backdrop" class="photo-review-backdrop" type="button" aria-label="Cancel photo attachment"></button>
+          <div class="photo-review-card" role="dialog" aria-modal="true" aria-labelledby="photo-review-title">
+            <h2 id="photo-review-title">Review photos</h2>
+            <div id="photo-review-previews" class="photo-review-previews"></div>
+            <div class="photo-review-actions">
+              <button id="cancel-photo-review" type="button">Cancel</button>
+              <button id="send-photo-review" type="button">Send photos</button>
+            </div>
+          </div>
+        </section>
+        <section id="photo-viewer" class="photo-viewer" aria-label="Photo preview" hidden>
+          <button id="photo-viewer-backdrop" class="photo-viewer-backdrop" type="button" aria-label="Close photo preview"></button>
+          <div class="photo-viewer-card" role="dialog" aria-modal="true" aria-label="Photo preview">
+            <button id="close-photo-viewer" class="photo-viewer-close" type="button" aria-label="Close photo preview">×</button>
+            <img id="photo-viewer-image" alt="Full-size chat photo" />
+            <button id="download-photo" type="button">Download image</button>
+          </div>
+        </section>
       </section>
       <p id="status" class="status" role="status" aria-live="polite"></p>
     </main>
