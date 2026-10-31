@@ -73,7 +73,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
   touch-action: manipulation;
 }
@@ -1062,12 +1063,25 @@ body.body--message-actions-open {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 44px 44px;
   gap: 6px 8px;
+  align-items: end;
   padding: 6px 16px max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid #1f1f22;
 }
 
-.message-form input {
+.message-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  max-height: 120px;
+  min-height: 44px;
+  resize: none;
+  overflow-y: auto;
   padding: 12px 14px;
+  border: 1px solid #27272a;
+  border-radius: 10px;
+  outline: none;
+  background: #111113;
+  color: inherit;
+  line-height: 20px;
 }
 
 .message-form .photo-button {

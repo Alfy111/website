@@ -129,6 +129,7 @@ let longPressMessage;
 let longPressPointerId;
 let longPressStartX = 0;
 let longPressStartY = 0;
+let lastMessageTap;
 let hasOlderMessages = false;
 let isLoadingOlderMessages = false;
 let serverSearchResults = [];
@@ -1660,6 +1661,14 @@ function updateCaptureButton() {
   takePhotoButton.classList.toggle('photo-button--send', hasMessage);
   takePhotoButton.setAttribute('aria-label', hasMessage ? 'Send message' : 'Take a photo');
   takePhotoButton.title = hasMessage ? 'Send message' : 'Take a photo';
+  autoResizeMessageInput();
+}
+
+function autoResizeMessageInput() {
+  messageInput.style.height = '44px';
+  const maxHeight = 120;
+  messageInput.style.height = `${Math.min(messageInput.scrollHeight, maxHeight)}px`;
+  messageInput.style.overflowY = messageInput.scrollHeight > maxHeight ? 'auto' : 'hidden';
 }
 
 function openPhotoReview(files) {
@@ -2182,6 +2191,30 @@ messagesList.addEventListener('dblclick', (event) => {
   void toggleMessageReaction(messageElement.dataset.messageId, 'heart');
 });
 
+messagesList.addEventListener('pointerup', (event) => {
+  if (event.pointerType === 'mouse' || event.target.closest('.message-reaction-controls, .message-reply')) return;
+  const messageElement = event.target.closest('.message');
+  if (!messageElement || messageElement.dataset.messageId.startsWith('pending-')) return;
+  const now = Date.now();
+  const tap = {
+    messageId: messageElement.dataset.messageId,
+    x: event.clientX,
+    y: event.clientY,
+    time: now,
+  };
+  if (
+    lastMessageTap &&
+    lastMessageTap.messageId === tap.messageId &&
+    now - lastMessageTap.time < 350 &&
+    Math.hypot(tap.x - lastMessageTap.x, tap.y - lastMessageTap.y) < 28
+  ) {
+    lastMessageTap = undefined;
+    void toggleMessageReaction(tap.messageId, 'heart');
+  } else {
+    lastMessageTap = tap;
+  }
+});
+
 messagesList.addEventListener('click', async (event) => {
   const replyEmbed = event.target.closest('[data-reply-target-id]');
   if (replyEmbed) {
@@ -2448,6 +2481,7 @@ quickExitButton.addEventListener('click', (event) => {
   quickExit();
 });
 
+autoResizeMessageInput();
 showPinPanel();
 updateNotificationButton();
 updateScrollLatestButton();
