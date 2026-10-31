@@ -58,7 +58,21 @@ const photoReviewPreviews = document.querySelector('#photo-review-previews');
 const photoViewer = document.querySelector('#photo-viewer');
 const photoViewerImage = document.querySelector('#photo-viewer-image');
 
-const QUICK_EXIT_URL = 'https://www.google.com/search?q=what%27s+pax+silica';
+const QUICK_EXIT_SEARCHES = [
+  "what's pax silica",
+  'eGovPH',
+  'My Love From The Start',
+  'Gemini',
+  'cute cats',
+  'easy dinner recipes',
+  'Philippines weather',
+  'fun random facts',
+  'today news',
+  'best beach destinations',
+  'how to draw a flower',
+  'motivational quotes',
+];
+let lastQuickExitSearchIndex = -1;
 const NOTIFICATIONS_ENABLED_KEY = 'chat-notifications-enabled';
 const NOTIFICATION_TITLE = 'Freeform Chat';
 const STREAK_BASE_DATE = '2026-10-31';
@@ -2345,7 +2359,14 @@ function quickExit() {
   window.clearInterval(syncTimer);
   window.clearInterval(presenceTimer);
   updateTypingStatus(false);
-  window.location.replace(QUICK_EXIT_URL);
+  let nextIndex = Math.floor(Math.random() * QUICK_EXIT_SEARCHES.length);
+  if (QUICK_EXIT_SEARCHES.length > 1 && nextIndex === lastQuickExitSearchIndex) {
+    nextIndex = (nextIndex + 1 + Math.floor(Math.random() * (QUICK_EXIT_SEARCHES.length - 1))) % QUICK_EXIT_SEARCHES.length;
+  }
+  lastQuickExitSearchIndex = nextIndex;
+  const searchUrl = new URL('https://www.google.com/search');
+  searchUrl.searchParams.set('q', QUICK_EXIT_SEARCHES[nextIndex]);
+  window.location.replace(searchUrl.href);
 }
 
 function applyQuickExitPosition(x, y) {
