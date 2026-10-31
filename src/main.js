@@ -63,8 +63,6 @@ const photoViewerImage = document.querySelector('#photo-viewer-image');
 const QUICK_EXIT_URL = 'https://www.google.com/search?q=what%27s+pax+silica';
 const NOTIFICATIONS_ENABLED_KEY = 'chat-notifications-enabled';
 const NOTIFICATION_TITLE = 'Freeform Chat';
-const PIN_SENT_TOTALS_KEY = 'chat-pin-sent-totals';
-const PIN_SENT_BASELINES_KEY = 'chat-pin-sent-baselines';
 const REACTIONS = {
   heart: { emoji: '❤️', label: 'Heart' },
   laugh: { emoji: '😂', label: 'Laugh' },
@@ -121,35 +119,18 @@ let isLoadingOlderMessages = false;
 let serverSearchResults = [];
 let searchRequestTimer;
 let editingMessageId = null;
-
-function readJsonStorage(key, fallback = {}) {
-  try {
-    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
-  } catch {
-    return fallback;
-  }
-}
-
-function getPinSentTotals() {
-  return readJsonStorage(PIN_SENT_TOTALS_KEY);
-}
-
-function getPinSentBaselines() {
-  return readJsonStorage(PIN_SENT_BASELINES_KEY);
-}
+let pinSentTotals = {};
 
 function updatePinSentCounts(counts) {
   if (counts?.x !== undefined || counts?.y !== undefined) {
-    const totals = { ...getPinSentTotals(), ...counts };
-    localStorage.setItem(PIN_SENT_TOTALS_KEY, JSON.stringify(totals));
+    pinSentTotals = { ...pinSentTotals, ...counts };
   }
   renderPinSentCounts();
 }
 
 function renderPinSentCounts() {
-  const totals = getPinSentTotals();
   for (const alias of ['x', 'y']) {
-    const total = Number(totals[alias] ?? 0);
+    const total = Number(pinSentTotals[alias] ?? 0);
     pinSentCounts.querySelector(`[data-pin-count="${alias}"]`).textContent = String(total);
   }
 }
