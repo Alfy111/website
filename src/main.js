@@ -342,19 +342,33 @@ async function requestChat(action, pin, content, typing, extra = {}) {
     throw new Error('Set the Supabase URL and publishable key in .env to enable synced chat.');
   }
 
+  const projectUrl = VITE_SUPABASE_URL.replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+  let lastNetworkError;
   let response;
-  try {
-    const projectUrl = VITE_SUPABASE_URL.replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
-    response = await fetch(`${projectUrl}/functions/v1/private-chat`, {
-      method: 'POST',
-      headers: {
-        apikey: VITE_SUPABASE_PUBLISHABLE_KEY,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ action, pin, content, isTyping: typing, ...extra }),
-    });
-  } catch {
-    throw new Error('Could not reach the chat server. Check your connection.');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 15000);
+    try {
+      response = await fetch(`${projectUrl}/functions/v1/private-chat`, {
+        method: 'POST',
+        headers: {
+          apikey: VITE_SUPABASE_PUBLISHABLE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ action, pin, content, isTyping: typing, ...extra }),
+        signal: controller.signal,
+      });
+      break;
+    } catch (error) {
+      lastNetworkError = error;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+  if (!response) {
+    throw new Error(lastNetworkError?.name === 'AbortError'
+      ? 'The chat server did not respond. Check your connection and try again.'
+      : 'Could not reach the chat server. Check your connection.');
   }
 
   let result;
@@ -825,6 +839,9 @@ document.addEventListener('visibilitychange', () => {
     void syncMessages(currentPin).catch((error) => {
       if (currentPin) setStatus(`Could not sync chat: ${error.message}`, true);
     });
+    if (notificationsEnabled) {
+      void reconcilePushNotifications(currentPin);
+    }
   }
 });
 scrollLatestButton.addEventListener('click', () => {
@@ -901,6 +918,24 @@ async function getPushSubscription(vapidPublicKey) {
     userVisibleOnly: true,
     applicationServerKey,
   });
+}
+
+async function reconcilePushNotifications(pin) {
+  if (!notificationsEnabled || Notification.permission !== 'granted') {
+    return;
+  }
+
+  try {
+    const pushConfig = await requestChat('push-config', pin);
+    const subscription = await getPushSubscription(pushConfig.vapidPublicKey);
+    await requestChat('push-subscribe', pin, undefined, undefined, {
+      subscription: subscription.toJSON(),
+      notificationTitle: NOTIFICATION_TITLE,
+    });
+  } catch (error) {
+    console.error('Could not restore push notification registration:', error);
+    setStatus(`Push notifications unavailable: ${error.message}`, true);
+  }
 }
 
 toggleNotificationsButton.addEventListener('click', async () => {
@@ -1020,6 +1055,9 @@ async function unlockChat(pin) {
         if (currentPin === pin) setStatus(`Could not sync chat: ${error.message}`, true);
       });
     }, SYNC_INTERVAL_MS);
+    if (notificationsEnabled) {
+      void reconcilePushNotifications(pin);
+    }
     if (outgoingMessages.some((message) => message.pin === pin && message.status === 'queued')) {
       void processOutgoingMessages(pin);
     }

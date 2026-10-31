@@ -14,7 +14,9 @@ self.addEventListener('push', (event) => {
     console.error('Could not parse push notification payload:', error);
   }
 
-  const title = 'Volume Should Be Turned Down';
+  const title = typeof payload.title === 'string'
+    ? payload.title
+    : 'Volume Should Be Turned Down';
   const options = {
     body: typeof payload.body === 'string' ? payload.body : '',
     icon: '/icons/volume-alert-192.png',

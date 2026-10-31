@@ -33,8 +33,10 @@ function isSupportedPushEndpoint(value: string) {
     const url = new URL(value);
     return url.protocol === 'https:' && (
       url.hostname === 'web.push.apple.com' ||
+      url.hostname.endsWith('.push.apple.com') ||
       url.hostname === 'fcm.googleapis.com' ||
-      url.hostname === 'updates.push.services.mozilla.com'
+      url.hostname === 'updates.push.services.mozilla.com' ||
+      url.hostname.endsWith('.notify.windows.com')
     );
   } catch {
     return false;
@@ -529,18 +531,20 @@ Deno.serve(async (request) => {
       webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
       const { data: subscriptions, error: subscriptionError } = await supabase
         .from('chat_push_subscriptions')
-        .select('endpoint, subscription')
+        .select('endpoint, subscription, notification_title')
         .eq('player', recipientPlayer);
 
       if (subscriptionError) {
         console.error('Could not load message push recipients:', subscriptionError.message);
       } else {
-        await Promise.all(subscriptions.map(async (savedSubscription) => {
+        await Promise.all((subscriptions ?? []).map(async (savedSubscription) => {
           try {
             await webpush.sendNotification(
               savedSubscription.subscription,
               JSON.stringify({
-                title: 'Volume Should Be Turned Down',
+                title: typeof savedSubscription.notification_title === 'string'
+                  ? savedSubscription.notification_title
+                  : 'Volume Should Be Turned Down',
                 body: "Based on your headphone usage over the last seven days, you've exceeded the recommended limit for audio exposure.",
                 icon: '/icons/volume-alert-192.png',
                 badge: '/icons/volume-alert-192.png',
