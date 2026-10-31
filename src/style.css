@@ -744,6 +744,37 @@ button:disabled {
   cursor: zoom-in;
 }
 
+.message-photo-wrap {
+  position: relative;
+  display: inline-flex;
+  overflow: hidden;
+  border-radius: 10px;
+}
+
+.message-photo-wrap--loading::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(110deg,
+      rgb(39 39 42 / 92%) 30%,
+      rgb(63 63 70 / 92%) 45%,
+      rgb(39 39 42 / 92%) 60%);
+  background-size: 220% 100%;
+  animation: photo-loading-shimmer 1.15s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.message-photo-wrap--loading .message-photo {
+  opacity: 0.72;
+}
+
+@keyframes photo-loading-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: 0 0; }
+}
+
 .message--photo-only {
   padding: 0;
   background: transparent;

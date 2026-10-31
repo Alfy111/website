@@ -66,6 +66,7 @@ Deno.serve(async (request) => {
     pin?: unknown;
     content?: unknown;
     isTyping?: unknown;
+    isActive?: unknown;
     messageId?: unknown;
     reaction?: unknown;
     enabled?: unknown;
@@ -92,6 +93,7 @@ Deno.serve(async (request) => {
     body.action !== 'react' &&
     body.action !== 'photo-upload' &&
     body.action !== 'photo-urls' &&
+    body.action !== 'presence' &&
     body.action !== 'push-config' &&
     body.action !== 'push-subscribe' &&
     body.action !== 'push-unsubscribe'
@@ -249,7 +251,7 @@ Deno.serve(async (request) => {
     const typingSince = new Date(Date.now() - 5000).toISOString();
     const { error: presenceUpdateError } = await supabase
       .from('chat_presence')
-      .upsert({ player, updated_at: new Date().toISOString() }, { onConflict: 'player' });
+      .upsert({ player, is_active: true, updated_at: new Date().toISOString() }, { onConflict: 'player' });
     const [
       { data, error },
       { data: typingState, error: typingError },
@@ -269,7 +271,7 @@ Deno.serve(async (request) => {
         .maybeSingle(),
       supabase
         .from('chat_presence')
-        .select('updated_at')
+        .select('is_active, updated_at')
         .eq('player', otherPlayer)
         .maybeSingle(),
     ]);
@@ -326,6 +328,7 @@ Deno.serve(async (request) => {
       otherPlayer,
       typingPlayer: typingState?.player ?? null,
       peerPresenceUpdatedAt: peerPresence?.updated_at ?? null,
+      peerPresenceActive: peerPresence?.is_active === true,
       messages: messages.map((message) => ({
         id: message.id,
         player: message.player,
@@ -349,6 +352,27 @@ Deno.serve(async (request) => {
         reactions: reactionsByMessage.get(message.id) ?? [],
       })),
     });
+  }
+
+  if (body.action === 'presence') {
+    if (typeof body.isActive !== 'boolean') {
+      return respond({ error: 'Presence state must be true or false.' }, 400);
+    }
+
+    const { error } = await supabase
+      .from('chat_presence')
+      .upsert({
+        player,
+        is_active: body.isActive,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'player' });
+
+    if (error) {
+      console.error('Could not update chat presence:', error.message);
+      return respond({ error: 'Could not update account presence.' }, 500);
+    }
+
+    return respond({});
   }
 
   if (body.action === 'react') {

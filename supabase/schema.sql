@@ -81,8 +81,12 @@ grant select, insert, update on public.chat_typing to service_role;
 
 create table if not exists public.chat_presence (
   player text primary key check (char_length(player) between 1 and 40),
+  is_active boolean not null default false,
   updated_at timestamptz not null default now()
 );
+
+alter table public.chat_presence
+  add column if not exists is_active boolean not null default false;
 
 alter table public.chat_presence enable row level security;
 revoke all on public.chat_presence from anon, authenticated;

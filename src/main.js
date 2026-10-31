@@ -103,6 +103,7 @@ let suppressQuickExitClick = false;
 const outgoingMessages = [];
 const mediaUrlCache = new Map();
 const pendingReactionActions = new Set();
+const optimisticReactionOverrides = new Map();
 let isProcessingSendQueue = false;
 let isTyping = false;
 let notificationsEnabled = localStorage.getItem(NOTIFICATIONS_ENABLED_KEY) === 'true';
@@ -140,6 +141,27 @@ function getReactionDetails(reaction) {
 
 function getReactionEntries() {
   return Object.entries(REACTIONS);
+}
+
+function getEffectiveReactions(message) {
+  const reactions = new Map(
+    (message.reactions ?? []).map((reaction) => [
+      `${reaction.player}:${reaction.reaction}`,
+      { ...reaction },
+    ]),
+  );
+  const overrides = optimisticReactionOverrides.get(message.id);
+  if (overrides) {
+    for (const [reaction, enabled] of overrides) {
+      const key = `${currentPlayer}:${reaction}`;
+      if (enabled) {
+        reactions.set(key, { player: currentPlayer, reaction });
+      } else {
+        reactions.delete(key);
+      }
+    }
+  }
+  return [...reactions.values()];
 }
 
 function appendReactionIcon(container, details) {
@@ -223,6 +245,11 @@ function renderMessage(message, animate = false, showSeen = false) {
   }
 
   if (message.mediaUrl || message.previewUrl) {
+    const photoWrap = document.createElement('div');
+    photoWrap.className = [
+      'message-photo-wrap',
+      ...(message.previewUrl && !message.mediaUrl ? ['message-photo-wrap--loading'] : []),
+    ].join(' ');
     const image = document.createElement('img');
     image.className = 'message-photo';
     image.src = message.previewUrl || message.mediaUrl;
@@ -235,7 +262,39 @@ function renderMessage(message, animate = false, showSeen = false) {
       image.alt = 'Photo preview could not be loaded';
       image.classList.add('message-photo--error');
     }, { once: true });
-    item.append(image);
+    photoWrap.append(image);
+
+    if (
+      message.mediaUrl &&
+      message.previewUrl &&
+      message.previewUrl !== message.mediaUrl
+    ) {
+      const fullPhoto = new Image();
+      fullPhoto.onload = () => {
+        image.src = message.mediaUrl;
+        photoWrap.classList.remove('message-photo-wrap--loading');
+        if (message.previewUrl?.startsWith('blob:')) {
+          window.setTimeout(() => URL.revokeObjectURL(message.previewUrl), 250);
+        }
+      };
+      fullPhoto.src = message.mediaUrl;
+    } else if (!message.previewUrl && message.mediaUrl) {
+      photoWrap.classList.add('message-photo-wrap--loading');
+      const fullPhoto = new Image();
+      fullPhoto.onload = () => {
+        image.src = message.mediaUrl;
+        photoWrap.classList.remove('message-photo-wrap--loading');
+        if (message.previewUrl?.startsWith('blob:')) {
+          window.setTimeout(() => URL.revokeObjectURL(message.previewUrl), 250);
+        }
+      };
+      fullPhoto.src = message.mediaUrl;
+    } else if (message.previewUrl && !message.mediaUrl) {
+      image.addEventListener('load', () => {
+        photoWrap.classList.remove('message-photo-wrap--loading');
+      }, { once: true });
+    }
+    item.append(photoWrap);
   }
 
   if (message.content) {
@@ -280,7 +339,7 @@ function renderMessage(message, animate = false, showSeen = false) {
     deliveryIndicator = retry;
   }
 
-  const reactions = message.reactions ?? [];
+  const reactions = getEffectiveReactions(message);
   const ownReactions = new Set(
     reactions.filter((reaction) => reaction.player === currentPlayer).map((reaction) => reaction.reaction),
   );
@@ -735,11 +794,15 @@ function localDateKey(date) {
 }
 
 let peerPresenceUpdatedAt;
+let peerPresenceActive = false;
 
-function updatePresence(presenceUpdatedAt) {
+function updatePresence(presenceUpdatedAt, presenceActive) {
   if (!currentPeer || !chatPresence) return;
   if (presenceUpdatedAt !== undefined) {
     peerPresenceUpdatedAt = presenceUpdatedAt;
+  }
+  if (presenceActive !== undefined) {
+    peerPresenceActive = presenceActive;
   }
 
   const dot = document.createElement('span');
@@ -750,7 +813,7 @@ function updatePresence(presenceUpdatedAt) {
   const elapsedSeconds = peerPresenceUpdatedAt
     ? Math.max(0, Math.floor((Date.now() - new Date(peerPresenceUpdatedAt).getTime()) / 1000))
     : Number.POSITIVE_INFINITY;
-  const isOnline = Number.isFinite(elapsedSeconds) && elapsedSeconds < 20;
+  const isOnline = peerPresenceActive && Number.isFinite(elapsedSeconds) && elapsedSeconds < 20;
 
   chatPresence.classList.toggle('chat-presence--online', isOnline);
   if (isOnline) {
@@ -766,13 +829,19 @@ function updatePresence(presenceUpdatedAt) {
 }
 
 function formatActiveAgo(elapsedSeconds) {
-  if (elapsedSeconds < 60) return `${elapsedSeconds}s`;
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds} ${elapsedSeconds === 1 ? 'second' : 'seconds'}`;
+  }
   const minutes = Math.floor(elapsedSeconds / 60);
-  if (minutes < 60) return `${minutes}m`;
+  if (minutes < 60) {
+    return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`;
+  }
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) {
+    return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+  }
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return `${days} ${days === 1 ? 'day' : 'days'}`;
 }
 
 function updateChatStats() {
@@ -818,7 +887,11 @@ function getVisibleMessages() {
     previewUrl: message.previewUrl,
     deliveryStatus: message.status,
   }));
-  return [...serverMessages, ...pendingMessages].sort((first, second) =>
+  const visibleServerMessages = serverMessages.map((message) => ({
+    ...message,
+    reactions: getEffectiveReactions(message),
+  }));
+  return [...visibleServerMessages, ...pendingMessages].sort((first, second) =>
     first.createdAt.localeCompare(second.createdAt),
   );
 }
@@ -873,12 +946,26 @@ window.addEventListener('pageshow', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && currentPin) {
     scrollMessagesToLatest('auto');
+    window.clearInterval(syncTimer);
+    syncTimer = window.setInterval(() => {
+      void syncMessages(currentPin).catch((error) => {
+        if (currentPin) setStatus(`Could not sync chat: ${error.message}`, true);
+      });
+    }, SYNC_INTERVAL_MS);
+    window.clearInterval(presenceTimer);
+    presenceTimer = window.setInterval(() => {
+      updatePresence();
+    }, 1000);
     void syncMessages(currentPin).catch((error) => {
       if (currentPin) setStatus(`Could not sync chat: ${error.message}`, true);
     });
     if (notificationsEnabled) {
       void reconcilePushNotifications(currentPin);
     }
+  } else if (document.visibilityState === 'hidden' && currentPin) {
+    window.clearInterval(syncTimer);
+    window.clearInterval(presenceTimer);
+    void requestChat('presence', currentPin, undefined, undefined, { isActive: false }).catch(() => {});
   }
 });
 scrollLatestButton.addEventListener('click', () => {
@@ -908,18 +995,29 @@ async function syncMessages(pin, shouldScroll = false) {
   if (currentPin !== pin) return;
   updatedMessages = await markMessagesSeen(updatedMessages, pin);
   if (currentPin !== pin) return;
-  for (const previous of serverMessages) {
-    if (
-      previous.previewUrl &&
-      updatedMessages.some((message) => message.mediaPath === previous.mediaPath && message.mediaUrl)
-    ) {
-      URL.revokeObjectURL(previous.previewUrl);
+  updatedMessages = updatedMessages.map((message) => {
+    const previous = serverMessages.find((item) => item.id === message.id);
+    const merged = previous?.previewUrl && message.mediaPath
+      ? { ...message, previewUrl: previous.previewUrl }
+      : message;
+    const overrides = optimisticReactionOverrides.get(message.id);
+    if (!overrides) return merged;
+
+    for (const [reaction, enabled] of overrides) {
+      const serverHasReaction = message.reactions?.some(
+        (item) => item.player === currentPlayer && item.reaction === reaction,
+      );
+      if (Boolean(serverHasReaction) === enabled) {
+        overrides.delete(reaction);
+      }
     }
-  }
+    if (!overrides.size) optimisticReactionOverrides.delete(message.id);
+    return merged;
+  });
   serverMessages = updatedMessages;
   updateChatStats();
   refreshVisibleMessages(shouldScroll);
-  updatePresence(result.peerPresenceUpdatedAt);
+  updatePresence(result.peerPresenceUpdatedAt, result.peerPresenceActive);
   typingIndicator.textContent = result.typingPlayer ? `${result.typingPlayer} is typing` : '';
   typingIndicator.classList.toggle('is-typing', Boolean(result.typingPlayer));
   typingIndicator.hidden = !result.typingPlayer;
@@ -1072,7 +1170,7 @@ async function unlockChat(pin) {
     if (currentPin !== pin) return;
     chatPlayer.textContent = result.otherPlayer;
     chatPlayer.setAttribute('aria-label', `Open ${result.otherPlayer}'s chat tools`);
-    updatePresence(result.peerPresenceUpdatedAt);
+    updatePresence(result.peerPresenceUpdatedAt, result.peerPresenceActive);
     updateChatStats();
     messageInput.placeholder = `Message as ${result.player}…`;
     typingIndicator.hidden = true;
@@ -1541,13 +1639,17 @@ async function processOutgoingMessages(pin) {
           serverMessages.push(messageWithPreview);
           serverMessages.sort((first, second) => first.createdAt.localeCompare(second.createdAt));
           updateChatStats();
+          refreshVisibleMessages(true);
           if (queuedMessage.mediaPath) {
             try {
               const [messageWithPhotoUrl] = await attachPhotoUrls([result.message], pin);
               const messageIndex = serverMessages.findIndex((message) => message.id === result.message.id);
               if (messageIndex !== -1 && messageWithPhotoUrl.mediaUrl) {
-                if (queuedMessage.previewUrl) URL.revokeObjectURL(queuedMessage.previewUrl);
-                serverMessages[messageIndex] = messageWithPhotoUrl;
+                serverMessages[messageIndex] = {
+                  ...messageWithPhotoUrl,
+                  previewUrl: queuedMessage.previewUrl,
+                };
+                refreshVisibleMessages(false);
               }
             } catch (error) {
               setStatus(`Message sent, but its photo preview could not be refreshed: ${error.message}`, true);
@@ -1592,7 +1694,8 @@ messagesList.addEventListener('click', async (event) => {
 
   const actionKey = `${messageId}:${reaction}`;
   if (pendingReactionActions.has(actionKey)) return;
-  const selectedReaction = message.reactions?.some(
+  const effectiveMessage = getVisibleMessages().find((item) => item.id === messageId) ?? message;
+  const selectedReaction = effectiveMessage.reactions?.some(
     (item) => item.player === currentPlayer && item.reaction === reaction,
   );
   closeMessageActions();
@@ -1600,6 +1703,9 @@ messagesList.addEventListener('click', async (event) => {
   if (!serverMessage) return;
   const previousReactions = serverMessage.reactions ?? [];
   pendingReactionActions.add(actionKey);
+  const overrides = optimisticReactionOverrides.get(messageId) ?? new Map();
+  overrides.set(reaction, !selectedReaction);
+  optimisticReactionOverrides.set(messageId, overrides);
   serverMessage.reactions = selectedReaction
     ? previousReactions.filter((item) => !(item.player === currentPlayer && item.reaction === reaction))
     : [...previousReactions, { player: currentPlayer, reaction }];
@@ -1613,6 +1719,7 @@ messagesList.addEventListener('click', async (event) => {
     });
   } catch (error) {
     serverMessage.reactions = previousReactions;
+    optimisticReactionOverrides.delete(messageId);
     if (currentPin === pin) {
       refreshVisibleMessages();
       setStatus(`Could not react to message: ${error.message}`, true);

@@ -1,6 +1,6 @@
 # Freeform Chat
 
-A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Enter one of the two PINs to open the shared conversation as that player. Messages are stored in Supabase and refresh from the cloud every five seconds. There are no email accounts or registrations.
+A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Enter one of the two PINs to open the shared conversation as that player. Messages are stored in Supabase and refresh from the cloud every two seconds. There are no email accounts or registrations.
 
 ## Set up the Supabase project
 
@@ -112,7 +112,7 @@ Use the photo button beside the message field to select one or more gallery imag
 
 Messages show when the other participant has seen them. Swipe a message to the right to reply; the reply is attached to the sent message and shown as a quoted preview.
 
-Long-press a message to focus it in place, show reactions above it, and open the vertical reply/copy actions alongside it. Tap the player name at the top left to open chat tools. Search is opened from its icon and displays full-message results with sender and date/time; select a result to jump to it in the conversation. The up/down buttons move through highlighted matches. **Photos** opens a three-column album; each photo includes a **Show in chat** action to jump to its message. Photo attachments can be previewed before sending, including images pasted from the clipboard. Tap a photo to open its full-size preview and download it. The chat header shows each player's messages sent today and the current streak; a streak day requires both players to send at least one message that local calendar day. The red quick-exit button in the chat can be dragged to a preferred position.
+Long-press a message to focus it in place, show reactions above it, and open the vertical reply/copy actions alongside it. Tap the player name at the top left to open chat tools. Search is opened from its icon and displays full-message results with sender and date/time; select a result to jump to it in the conversation. The up/down buttons move through highlighted matches. **Photos** opens a three-column album; each photo includes a **Show in chat** action to jump to its message. Photo attachments can be previewed before sending, including images pasted from the clipboard. Tap a photo to open its full-size preview and download it. The chat header shows the other player's presence and the current streak. A green status means the account is active now; otherwise it shows elapsed seconds, minutes, hours, or days. A streak day requires both players to send at least one message that local calendar day. The red quick-exit button in the chat can be dragged to a preferred position.
 
 On iOS, deploy to HTTPS, open the site in Safari, add it to the Home Screen, open the installed app, unlock the chat, and tap **Enable alerts** to grant push permission and register that device. Repeat on each device. Each incoming message sends its own push notification, so notifications can stack; chat content is not included. Alerts can be disabled independently on each device. Push display also depends on the device's notification and Focus settings.
 
