@@ -17,7 +17,6 @@ const PHOTO_UPLOAD_MIME_TYPES = new Set([
 const status = document.querySelector('#status');
 const pinPanel = document.querySelector('#pin-panel');
 const pinDots = document.querySelector('#pin-dots');
-const pinSentCounts = document.querySelector('#pin-sent-counts');
 const keypad = document.querySelector('#keypad');
 const chatPanel = document.querySelector('#chat-panel');
 const chatPlayer = document.querySelector('#chat-player');
@@ -119,24 +118,6 @@ let isLoadingOlderMessages = false;
 let serverSearchResults = [];
 let searchRequestTimer;
 let editingMessageId = null;
-let pinSentTotals = {};
-
-function updatePinSentCounts(counts) {
-  if (counts?.x !== undefined || counts?.y !== undefined) {
-    pinSentTotals = { ...pinSentTotals, ...counts };
-  }
-  renderPinSentCounts();
-}
-
-function renderPinSentCounts() {
-  for (const alias of ['x', 'y']) {
-    const total = Number(pinSentTotals[alias] ?? 0);
-    pinSentCounts.querySelector(`[data-pin-count="${alias}"]`).textContent = String(total);
-  }
-}
-
-renderPinSentCounts();
-
 function setStatus(message, isError = false, isHighlighted = false) {
   if (chatPanel.hidden) {
     pinPanel.after(status);
@@ -1067,7 +1048,6 @@ async function syncMessages(pin, shouldScroll = false) {
     afterCursor: newestLoadedAt || undefined,
     limit: 50,
   });
-  updatePinSentCounts(result.sentCounts);
   if (currentPin !== pin) return;
   let updatedMessages = await attachPhotoUrls(result.messages, pin);
   if (currentPin !== pin) return;
@@ -1242,11 +1222,10 @@ async function unlockChat(pin) {
   setStatus('Checking PIN…');
 
   try {
-    const result = await requestChat('load', pin, undefined, undefined, { limit: 50, markViewed: true });
+    const result = await requestChat('load', pin, undefined, undefined, { limit: 50 });
     currentPin = pin;
     currentPlayer = result.player;
     currentPeer = result.otherPlayer;
-    updatePinSentCounts(result.sentCounts);
     hasOlderMessages = result.hasOlder === true;
     serverMessages = await attachPhotoUrls(result.messages, pin);
     serverMessages = await markMessagesSeen(serverMessages, pin);
