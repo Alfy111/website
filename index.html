@@ -14,34 +14,20 @@
   </head>
   <body>
     <main class="chat-shell">
-      <section id="pin-panel" class="pin-panel" aria-label="Enter PIN">
-        <div id="pin-dots" class="pin-dots" aria-hidden="true"></div>
-        <div id="keypad" class="keypad">
-          <button type="button" data-digit="1" aria-label="1">1</button>
-          <button type="button" data-digit="2" aria-label="2">2</button>
-          <button type="button" data-digit="3" aria-label="3">3</button>
-          <button type="button" data-digit="4" aria-label="4">4</button>
-          <button type="button" data-digit="5" aria-label="5">5</button>
-          <button type="button" data-digit="6" aria-label="6">6</button>
-          <button type="button" data-digit="7" aria-label="7">7</button>
-          <button type="button" data-digit="8" aria-label="8">8</button>
-          <button type="button" data-digit="9" aria-label="9">9</button>
-          <button
-            id="pin-quick-exit"
-            class="quick-exit-button"
-            type="button"
-            aria-label="Quick exit to Google Search"
-            title="Quick exit"
-          >×</button>
-          <button type="button" data-digit="0" aria-label="0">0</button>
-          <button type="button" data-action="backspace" aria-label="Delete last digit">⌫</button>
+      <section id="pin-panel" class="pin-panel identity-panel" aria-label="Choose player">
+        <div id="keypad" class="identity-picker">
+          <button type="button" class="identity-button identity-button--x" data-player-key="x" aria-label="Open as X">X</button>
+          <button type="button" class="identity-button identity-button--y" data-player-key="y" aria-label="Open as Y">Y</button>
         </div>
       </section>
 
       <section id="chat-panel" class="chat-panel" aria-label="Conversation" hidden>
         <header class="chat-header">
           <div class="chat-heading">
-            <button id="chat-player" class="chat-player" type="button" aria-label="Open chat tools"></button>
+            <div class="chat-name-row">
+              <button id="chat-player" class="chat-player" type="button" aria-label="Open chat tools"></button>
+              <span id="chat-peer-note" class="chat-peer-note" hidden></span>
+            </div>
             <p id="chat-presence" class="chat-presence" aria-live="polite"></p>
             <p id="chat-stats" class="chat-stats" aria-live="polite"></p>
           </div>
@@ -109,6 +95,18 @@
             </div>
           </header>
           <div class="chat-tools-actions">
+            <button id="open-note-editor" class="chat-tool-action" type="button">
+              <span class="chat-tool-icon" aria-hidden="true">✎</span>
+              <span id="open-note-editor-label">Add note</span>
+            </button>
+            <form id="note-editor" class="chat-note-editor" hidden>
+              <label for="chat-note-input">Your note</label>
+              <textarea id="chat-note-input" maxlength="120" rows="3" placeholder="Write something for the other player…"></textarea>
+              <div class="chat-note-editor-actions">
+                <button id="cancel-note" class="chat-note-button chat-note-button--secondary" type="button">Cancel</button>
+                <button class="chat-note-button" type="submit">Save note</button>
+              </div>
+            </form>
             <button id="open-search" class="chat-tool-action" type="button">
               <span class="chat-tool-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none">
@@ -172,7 +170,10 @@
           <div class="photo-viewer-card" role="dialog" aria-modal="true" aria-label="Photo preview">
             <button id="close-photo-viewer" class="photo-viewer-close" type="button" aria-label="Close photo preview">×</button>
             <img id="photo-viewer-image" alt="Full-size chat photo" />
-            <button id="download-photo" type="button">Download image</button>
+            <div class="photo-viewer-actions">
+              <button id="download-photo" type="button">Download image</button>
+              <button id="show-photo-in-chat" type="button">Show in chat</button>
+            </div>
           </div>
         </section>
       </section>

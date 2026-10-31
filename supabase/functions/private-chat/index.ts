@@ -44,8 +44,12 @@ function isSupportedPushEndpoint(value: string) {
 }
 
 function isPlayerPhotoPath(value: unknown, player: string): value is string {
-  if (typeof value !== 'string' || !value.startsWith(`${player}/`)) return false;
-  return isPhotoFilename(value.slice(player.length + 1));
+  if (typeof value !== 'string') return false;
+  const slashIndex = value.indexOf('/');
+  if (slashIndex < 0) return false;
+  const owner = value.slice(0, slashIndex);
+  if (owner.toLocaleLowerCase() !== player.toLocaleLowerCase()) return false;
+  return isPhotoFilename(value.slice(slashIndex + 1));
 }
 
 function isPhotoFilename(value: string) {
@@ -83,6 +87,7 @@ Deno.serve(async (request) => {
     beforeCursor?: unknown;
     afterCursor?: unknown;
     aroundCursor?: unknown;
+    playerKey?: unknown;
   };
   try {
     body = await request.json();
@@ -92,12 +97,14 @@ Deno.serve(async (request) => {
 
   if (
     body.action !== 'load' &&
+    body.action !== 'photo-album-load' &&
     body.action !== 'search' &&
     body.action !== 'edit' &&
     body.action !== 'send' &&
     body.action !== 'seen' &&
     body.action !== 'typing' &&
     body.action !== 'react' &&
+    body.action !== 'note-set' &&
     body.action !== 'photo-upload' &&
     body.action !== 'photo-urls' &&
     body.action !== 'presence' &&
@@ -107,10 +114,6 @@ Deno.serve(async (request) => {
   ) {
     return respond({ error: 'Invalid action.' }, 400);
   }
-  if (typeof body.pin !== 'string' || !/^\d{4}$/.test(body.pin)) {
-    return respond({ error: 'Enter a 4-digit PIN.' }, 400);
-  }
-
   const url = Deno.env.get('SUPABASE_URL');
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const pin1 = Deno.env.get('CHAT_PIN_1');
@@ -120,7 +123,20 @@ Deno.serve(async (request) => {
     return respond({ error: 'Chat server is not configured correctly.' }, 500);
   }
 
-  const player = body.pin === pin1
+  const playerKey = typeof body.playerKey === 'string' ? body.playerKey.toLowerCase() : null;
+  const isPlayer1 = playerKey === 'x' || (!playerKey && body.pin === pin1);
+  const isPlayer2 = playerKey === 'y' || (!playerKey && body.pin === pin2);
+  if (!isPlayer1 && !isPlayer2) {
+    return respond({ error: 'Choose a valid player.' }, 400);
+  }
+
+  if (playerKey === 'x' || playerKey === 'y') {
+    body.pin = playerKey === 'x' ? pin1 : pin2;
+  } else if (typeof body.pin !== 'string' || !/^\d{4}$/.test(body.pin)) {
+    return respond({ error: 'Choose a valid player.' }, 400);
+  }
+
+  const player = isPlayer1
     ? (Deno.env.get('CHAT_PLAYER_1') || 'ashy')
     : body.pin === pin2
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
@@ -317,8 +333,34 @@ Deno.serve(async (request) => {
     });
   }
 
+  if (body.action === 'photo-album-load') {
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('id, player, content, media_path, created_at, edited_at, reply_to, seen_by, seen_at')
+      .not('media_path', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(1000);
+    if (error) {
+      console.error('Could not load photo album:', error.message);
+      return respond({ error: 'Could not load the photo album.' }, 500);
+    }
+    return respond({
+      messages: (data ?? []).map((message) => ({
+        id: message.id,
+        player: message.player,
+        content: message.content,
+        mediaPath: message.media_path,
+        createdAt: message.created_at,
+        editedAt: message.edited_at,
+        replyTo: message.reply_to,
+        seenBy: message.seen_by,
+        seenAt: message.seen_at,
+      })),
+    });
+  }
+
   if (body.action === 'load') {
-    const otherPlayer = body.pin === pin1
+    const otherPlayer = isPlayer1
       ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
       : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
     const player1 = Deno.env.get('CHAT_PLAYER_1') || 'ashy';
@@ -334,9 +376,39 @@ Deno.serve(async (request) => {
     const afterCursor = typeof body.afterCursor === 'string'
       ? new Date(body.afterCursor)
       : null;
-    const aroundCursor = typeof body.aroundCursor === 'string'
+    let aroundCursor = typeof body.aroundCursor === 'string'
       ? new Date(body.aroundCursor)
       : null;
+    const aroundMessageId = typeof body.aroundMessageId === 'string'
+      ? body.aroundMessageId
+      : null;
+    if (aroundMessageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(aroundMessageId)) {
+      return respond({ error: 'Invalid message target.' }, 400);
+    }
+    if (aroundMessageId && !aroundCursor) {
+      const { data: targetMessage, error: targetError } = await supabase
+        .from('chat_messages')
+        .select('created_at')
+        .eq('id', aroundMessageId)
+        .maybeSingle();
+      if (targetError) {
+        return respond({ error: 'Could not load the replied-to message.' }, 500);
+      }
+      if (!targetMessage?.created_at) {
+        return respond({ error: 'Replied-to message was not found.' }, 404);
+      }
+      const targetCursor = new Date(String(targetMessage.created_at));
+      if (Number.isNaN(targetCursor.getTime())) {
+        return respond({ error: 'Invalid replied-to message time.' }, 500);
+      }
+      aroundCursor = targetCursor;
+    }
+    const syncMessageIds = Array.isArray(body.syncMessageIds)
+      ? [...new Set(body.syncMessageIds.filter((id: unknown) =>
+        typeof id === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+      ).map((id: string) => id))].slice(0, 1000)
+      : [];
     if (
       (beforeCursor && Number.isNaN(beforeCursor.getTime())) ||
       (afterCursor && Number.isNaN(afterCursor.getTime())) ||
@@ -431,6 +503,7 @@ Deno.serve(async (request) => {
       { data: peerPresence, error: presenceError },
       xCountResult,
       yCountResult,
+      { data: notes, error: notesError },
     ] = await Promise.all([
       messageQuery,
       supabase
@@ -447,6 +520,10 @@ Deno.serve(async (request) => {
         .maybeSingle(),
       xCountQuery,
       yCountQuery,
+      supabase
+        .from('chat_notes')
+        .select('player, note')
+        .in('player', [player, otherPlayer]),
     ]);
 
     if (error) {
@@ -461,6 +538,10 @@ Deno.serve(async (request) => {
       console.error('Could not update or load chat presence:',
         (presenceUpdateError || presenceError)?.message);
       return respond({ error: 'Could not load account presence.' }, 500);
+    }
+    if (notesError) {
+      console.error('Could not load chat notes:', notesError.message);
+      return respond({ error: 'Could not load chat notes.' }, 500);
     }
 
     let messages = data ?? [];
@@ -477,7 +558,10 @@ Deno.serve(async (request) => {
       if (hasOlder) messages = messages.slice(0, limit);
       messages = messages.reverse();
     }
-    const messageIds = messages.map((message) => message.id);
+    const messageIds = [...new Set([
+      ...messages.map((message) => message.id),
+      ...syncMessageIds,
+    ])];
     const replyToIds = [...new Set(messages.map((message) => message.reply_to).filter(Boolean))];
     const { data: reactions, error: reactionsError } = messageIds.length
       ? await supabase
@@ -508,14 +592,25 @@ Deno.serve(async (request) => {
       reactionsByMessage.set(reaction.message_id, messageReactions);
     }
     const replyParentById = new Map(replyParents.map((message) => [message.id, message]));
+    const noteByPlayer = new Map(
+      (notes ?? []).map((item) => [item.player, item.note]),
+    );
 
     return respond({
       player,
       otherPlayer,
+      currentNote: noteByPlayer.get(player) ?? '',
+      peerNote: noteByPlayer.get(otherPlayer) ?? '',
       typingPlayer: typingState?.player ?? null,
       peerPresenceUpdatedAt: peerPresence?.updated_at ?? null,
       peerPresenceActive: peerPresence?.is_active === true,
       hasOlder,
+      reactionUpdates: Object.fromEntries(
+        syncMessageIds.map((messageId) => [
+          messageId,
+          reactionsByMessage.get(messageId) ?? [],
+        ]),
+      ),
       sentCounts: {
         x: xCountResult.count ?? 0,
         y: yCountResult.count ?? 0,
@@ -701,6 +796,22 @@ Deno.serve(async (request) => {
     return respond({});
   }
 
+  if (body.action === 'note-set') {
+    const note = typeof body.note === 'string' ? body.note.trim().slice(0, 120) : '';
+    const { error } = await supabase
+      .from('chat_notes')
+      .upsert({
+        player,
+        note,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'player' });
+    if (error) {
+      console.error('Could not save chat note:', error.message);
+      return respond({ error: 'Could not save your note.' }, 500);
+    }
+    return respond({ note });
+  }
+
   const content = typeof body.content === 'string' ? body.content.trim() : '';
   const mediaPath = body.mediaPath === undefined ? null : body.mediaPath;
   const replyToId = body.replyToId === undefined ? null : body.replyToId;
@@ -754,7 +865,7 @@ Deno.serve(async (request) => {
     return respond({ error: 'Could not save your message.' }, 500);
   }
 
-  const recipientPlayer = body.pin === pin1
+  const recipientPlayer = isPlayer1
     ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
     : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');

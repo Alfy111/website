@@ -107,64 +107,94 @@ button:disabled {
   transform: translateY(5vh);
 }
 
-
-.pin-dots {
-  min-height: 24px;
-  display: flex;
-  justify-content: center;
-  gap: 18px;
-  margin-bottom: 36px;
+.identity-panel {
+  animation: identity-panel-enter 420ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
 }
 
-.pin-dot {
-  width: 9px;
-  height: 9px;
-  border: 1px solid #52525b;
-  border-radius: 50%;
+.identity-panel--loading .identity-button {
+  pointer-events: none;
+  animation: identity-button-loading 700ms ease-in-out infinite alternate;
 }
 
-.pin-dot--filled {
-  border-color: #f4f4f5;
-  background: #f4f4f5;
+.identity-panel--opening-chat {
+  animation: identity-panel-leave 280ms ease-in forwards;
 }
 
-.keypad {
+.chat-panel--entering {
+  animation: chat-panel-enter 520ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+@keyframes identity-panel-enter {
+  from { opacity: 0; transform: translateY(calc(5vh + 18px)) scale(0.92); }
+  to { opacity: 1; transform: translateY(5vh) scale(1); }
+}
+
+@keyframes identity-button-loading {
+  from { filter: brightness(0.85); transform: scale(0.96); }
+  to { filter: brightness(1.3); transform: scale(1.02); }
+}
+
+@keyframes identity-panel-leave {
+  from { opacity: 1; transform: translateY(5vh) scale(1); }
+  to { opacity: 0; transform: translateY(3vh) scale(1.08); }
+}
+
+@keyframes chat-panel-enter {
+  from { opacity: 0; transform: scale(0.985) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+
+.identity-picker {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(2, 112px);
+  gap: 20px;
+  justify-content: center;
 }
 
-.keypad button {
+.identity-button {
   width: 100%;
-  aspect-ratio: 1;
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 50%;
-  background: #18181b;
-  font-size: 24px;
-  font-weight: 400;
-  transition: background-color 120ms ease, transform 120ms ease;
+  background: transparent;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 112px;
+  padding: 0;
+  transition: transform 180ms ease, filter 180ms ease;
   -webkit-tap-highlight-color: transparent;
 }
 
-.keypad button:hover {
-  background: #27272a;
+.identity-button--x {
+  color: #fff7ed;
+  text-shadow: 0 0 12px rgb(154 106 67 / 90%), 0 0 28px rgb(154 106 67 / 65%);
 }
 
-.keypad button:active {
-  transform: scale(0.96);
-  background: #3f3f46;
+.identity-button--y {
+  color: #fff1f2;
+  text-shadow: 0 0 12px rgb(225 29 72 / 90%), 0 0 28px rgb(225 29 72 / 65%);
 }
 
-.keypad .quick-exit-button {
-  border: 1px solid #ef4444;
-  background: #450a0a;
-  color: #fca5a5;
-  font-size: 40px;
-  line-height: 1;
-  opacity: 0.2;
+.identity-button:active {
+  transform: scale(0.94);
+  filter: brightness(1.25);
 }
+
+.identity-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+
+.identity-mark {
+  margin-bottom: 24px;
+  color: #71717a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
 
 .keypad .quick-exit-button:hover {
   background: #7f1d1d;
@@ -242,6 +272,22 @@ button:disabled {
   min-width: 0;
   display: grid;
   gap: 3px;
+}
+
+.chat-name-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chat-peer-note {
+  overflow: hidden;
+  max-width: 180px;
+  color: #d4d4d8;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chat-stats {
@@ -551,6 +597,18 @@ button:disabled {
   touch-action: pan-y;
 }
 
+.messages.messages--actions-open {
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+}
+
+body.body--message-actions-open {
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 .messages-empty {
   align-self: center;
   margin: auto;
@@ -654,6 +712,23 @@ button:disabled {
   border-radius: 0 6px 6px 0;
   background: rgb(255 255 255 / 5%);
   font-size: 11px;
+  cursor: pointer;
+}
+
+.message-reply:focus-visible {
+  outline: 2px solid #a78bfa;
+  outline-offset: 2px;
+}
+
+.message--reply-target {
+  animation: reply-target-pulse 1.8s ease-out;
+}
+
+@keyframes reply-target-pulse {
+  0%, 100% { filter: none; transform: translateX(0); }
+  20% { filter: brightness(1.35); transform: translateX(4px); }
+  50% { filter: brightness(1.15); }
+  80% { filter: brightness(1.05); transform: translateX(-2px); }
 }
 
 .message-reply-author {
@@ -707,6 +782,7 @@ button:disabled {
   bottom: calc(100% + 8px);
   left: 0;
   z-index: 12;
+  transform: translateY(-2px);
 }
 
 .message--own.message--focused .message-reaction-picker {
@@ -936,11 +1012,12 @@ button:disabled {
 }
 
 .reaction-icon {
-  width: 64px;
-  height: 64px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   object-fit: cover;
 }
+
 
 .reaction-option {
   width: 82px;
@@ -1186,8 +1263,65 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 88px;
+  width: 112px;
   pointer-events: auto;
+}
+
+.message-actions-buttons--opening {
+  animation: message-actions-unfold 220ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+.message-actions-buttons--opening button {
+  animation: message-action-button-in 180ms cubic-bezier(0.2, 0.75, 0.3, 1) both;
+}
+
+.message-actions-buttons--opening button:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.message-actions-buttons--opening button:nth-child(2) {
+  animation-delay: 55ms;
+}
+
+.message-actions-buttons--opening button:nth-child(3) {
+  animation-delay: 110ms;
+}
+
+.message-actions-buttons--opening button:nth-child(4) {
+  animation-delay: 165ms;
+}
+
+.message-actions-buttons--opening button:nth-child(5) {
+  animation-delay: 220ms;
+}
+
+@keyframes message-actions-unfold {
+  from {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes message-action-button-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.75);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-actions-buttons--opening,
+  .message-actions-buttons--opening button {
+    animation: none;
+  }
 }
 
 .photo-review-actions {
@@ -1218,16 +1352,6 @@ button:disabled {
 
 .message-actions-buttons button:hover {
   background: #3f3f46;
-}
-
-.message-actions-buttons--horizontal {
-  width: max-content;
-  max-width: calc(100% - 16px);
-  flex-direction: row;
-}
-
-.message-actions-buttons--horizontal button {
-  flex: 0 0 auto;
 }
 
 .message-edited {
@@ -1288,6 +1412,12 @@ button:disabled {
   object-fit: contain;
 }
 
+.photo-viewer-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
 .photo-viewer-close {
   justify-self: end;
   width: 36px;
@@ -1342,6 +1472,49 @@ button:disabled {
   display: grid;
   gap: 10px;
   padding: 16px;
+}
+
+.chat-note-editor {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #27272a;
+  border-radius: 12px;
+  background: #111113;
+  color: #a1a1aa;
+  font-size: 12px;
+}
+
+.chat-note-editor textarea {
+  width: 100%;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid #3f3f46;
+  border-radius: 8px;
+  background: #09090b;
+  color: #f4f4f5;
+  padding: 10px;
+  font: inherit;
+}
+
+.chat-note-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.chat-note-button {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #52525b;
+  border-radius: 8px;
+  background: #27272a;
+  color: #fff;
+}
+
+.chat-note-button--secondary {
+  background: transparent;
+  color: #d4d4d8;
 }
 
 .chat-tool-action {
@@ -1430,6 +1603,7 @@ button:disabled {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: calc((100% - 12px) / 5);
   align-content: start;
   gap: 3px;
   overflow: auto;
@@ -1440,11 +1614,15 @@ button:disabled {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
   overflow: hidden;
-  padding: 0 0 6px;
   border-radius: 7px;
   background: #111113;
+}
+
+.photo-album-scroll-edge {
+  grid-column: 1 / -1;
+  height: 8px;
+  pointer-events: none;
 }
 
 .photo-album-preview {
@@ -1462,6 +1640,27 @@ button:disabled {
   height: 100%;
   object-fit: cover;
   transition: transform 160ms ease;
+}
+
+.photo-album-preview--loading {
+  position: relative;
+  background:
+    linear-gradient(100deg, #18181b 20%, #27272a 35%, #18181b 50%);
+  background-size: 200% 100%;
+  animation: photo-album-skeleton 1.2s ease-in-out infinite;
+}
+
+.photo-album-preview--loading img {
+  opacity: 0;
+}
+
+.photo-album-image--error {
+  opacity: 0.35;
+}
+
+@keyframes photo-album-skeleton {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
 }
 
 .photo-album-preview:hover img {
