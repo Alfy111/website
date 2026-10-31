@@ -1233,6 +1233,9 @@ document.querySelector('#photo-review-backdrop').addEventListener('click', clear
 function openMessageActions(element) {
   const message = currentMessages.find((item) => item.id === element.dataset.messageId);
   if (!message) return;
+  if (swipeMessage) swipeMessage.style.transform = '';
+  swipeMessage = undefined;
+  swipePointerId = undefined;
   activeActionMessageId = message.id;
   suppressedMessageClickId = message.id;
   window.clearTimeout(suppressedMessageClickTimer);
@@ -1593,9 +1596,17 @@ let swipeStartX = 0;
 let swipeStartY = 0;
 
 messagesList.addEventListener('pointerdown', (event) => {
-  if (event.pointerType !== 'touch' || event.target.closest('.message-reaction-controls')) return;
+  if (
+    event.pointerType !== 'touch' ||
+    !messageActions.hidden ||
+    event.target.closest('.message-reaction-controls')
+  ) return;
   const element = event.target.closest('.message');
-  if (!element || element.dataset.messageId.startsWith('pending-')) return;
+  if (
+    !element ||
+    element.classList.contains('message--focused') ||
+    element.dataset.messageId.startsWith('pending-')
+  ) return;
   swipeMessage = element;
   swipePointerId = event.pointerId;
   swipeStartX = event.clientX;

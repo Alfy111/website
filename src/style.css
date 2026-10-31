@@ -233,7 +233,7 @@ button:disabled {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: max(30px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -343,6 +343,10 @@ button:disabled {
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   padding: 8px 16px 0;
+}
+
+.search-page > .message-tools {
+  padding-top: max(60px, env(safe-area-inset-top));
 }
 
 .message-tools[hidden] {
@@ -1240,7 +1244,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
@@ -1316,7 +1320,7 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  padding: max(60px, env(safe-area-inset-top)) 16px 8px;
   border-bottom: 1px solid #1f1f22;
 }
 
