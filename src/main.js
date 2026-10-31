@@ -17,6 +17,7 @@ const PHOTO_UPLOAD_MIME_TYPES = new Set([
 const status = document.querySelector('#status');
 const pinPanel = document.querySelector('#pin-panel');
 const pinDots = document.querySelector('#pin-dots');
+const pinSentCounts = document.querySelector('#pin-sent-counts');
 const keypad = document.querySelector('#keypad');
 const chatPanel = document.querySelector('#chat-panel');
 const chatPlayer = document.querySelector('#chat-player');
@@ -62,6 +63,8 @@ const photoViewerImage = document.querySelector('#photo-viewer-image');
 const QUICK_EXIT_URL = 'https://www.google.com/search?q=what%27s+pax+silica';
 const NOTIFICATIONS_ENABLED_KEY = 'chat-notifications-enabled';
 const NOTIFICATION_TITLE = 'Freeform Chat';
+const PIN_SENT_TOTALS_KEY = 'chat-pin-sent-totals';
+const PIN_SENT_BASELINES_KEY = 'chat-pin-sent-baselines';
 const REACTIONS = {
   heart: { emoji: '❤️', label: 'Heart' },
   laugh: { emoji: '😂', label: 'Laugh' },
@@ -113,6 +116,58 @@ let longPressMessage;
 let longPressPointerId;
 let longPressStartX = 0;
 let longPressStartY = 0;
+let hasOlderMessages = false;
+let isLoadingOlderMessages = false;
+let serverSearchResults = [];
+let searchRequestTimer;
+let editingMessageId = null;
+
+function readJsonStorage(key, fallback = {}) {
+  try {
+    return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback));
+  } catch {
+    return fallback;
+  }
+}
+
+function getPinSentTotals() {
+  return readJsonStorage(PIN_SENT_TOTALS_KEY);
+}
+
+function getPinSentBaselines() {
+  return readJsonStorage(PIN_SENT_BASELINES_KEY);
+}
+
+function updatePinSentCounts(counts) {
+  if (counts?.x !== undefined || counts?.y !== undefined) {
+    const totals = { ...getPinSentTotals(), ...counts };
+    localStorage.setItem(PIN_SENT_TOTALS_KEY, JSON.stringify(totals));
+
+    if (currentPlayer) {
+      const playerName = String(currentPlayer).toLowerCase();
+      const viewedAlias = playerName.includes('alfie') ? 'y' : playerName.includes('ashy') ? 'x' : null;
+      if (viewedAlias) {
+        const baselines = getPinSentBaselines();
+        baselines[viewedAlias] = Number(totals[viewedAlias] ?? 0);
+        localStorage.setItem(PIN_SENT_BASELINES_KEY, JSON.stringify(baselines));
+      }
+    }
+  }
+  renderPinSentCounts();
+}
+
+function renderPinSentCounts() {
+  const totals = getPinSentTotals();
+  const baselines = getPinSentBaselines();
+  for (const alias of ['x', 'y']) {
+    const total = Number(totals[alias] ?? 0);
+    const baseline = Number(baselines[alias] ?? 0);
+    const count = Math.max(0, total - baseline);
+    pinSentCounts.querySelector(`[data-pin-count="${alias}"]`).textContent = String(count);
+  }
+}
+
+renderPinSentCounts();
 
 function setStatus(message, isError = false, isHighlighted = false) {
   if (chatPanel.hidden) {
@@ -302,6 +357,13 @@ function renderMessage(message, animate = false, showSeen = false) {
     body.className = 'message-body';
     appendHighlightedText(body, message.content);
     item.append(body);
+  }
+
+  if (message.editedAt) {
+    const edited = document.createElement('span');
+    edited.className = 'message-edited';
+    edited.textContent = 'edited';
+    item.append(edited);
   }
 
   const time = document.createElement('time');
@@ -535,7 +597,9 @@ cancelReplyButton.addEventListener('click', () => updateReplyPreview(null));
 
 function updateMessages(messages, shouldScroll = false, animateNewMessages = true) {
   const previousIds = new Set(currentMessages.map((message) => message.id));
-  const matchingMessages = messages.filter((message) => {
+  const matchingMessages = searchQuery && serverSearchResults.length
+    ? serverSearchResults
+    : messages.filter((message) => {
     if (!searchQuery) return true;
     const searchableText = `${message.player} ${message.content} ${message.replyTo?.player ?? ''} ${message.replyTo?.content ?? ''}`;
     return searchableText.toLocaleLowerCase().includes(searchQuery);
@@ -723,11 +787,31 @@ function navigateSearchResults(direction) {
   });
 }
 
-function showMessageInChat(messageId) {
+async function showMessageInChat(messageId) {
   returnToToolsAfterSearch = false;
+  const searchMatch = serverSearchResults.find((message) => message.id === messageId);
   if (searchActive) closeSearch();
   hideChatTools();
   photoAlbum.hidden = true;
+  if (searchMatch && currentPin) {
+    try {
+      const result = await requestChat('load', currentPin, undefined, undefined, {
+        aroundCursor: searchMatch.createdAt,
+        limit: 50,
+      });
+      let contextMessages = await attachPhotoUrls(result.messages, currentPin);
+      contextMessages = await markMessagesSeen(contextMessages, currentPin);
+      if (currentPin) {
+        const mergedById = new Map(serverMessages.map((message) => [message.id, message]));
+        for (const message of contextMessages) mergedById.set(message.id, message);
+        serverMessages = [...mergedById.values()].sort((first, second) =>
+          first.createdAt.localeCompare(second.createdAt));
+        refreshVisibleMessages(false, false);
+      }
+    } catch (error) {
+      setStatus(`Could not load older message context: ${error.message}`, true);
+    }
+  }
   window.requestAnimationFrame(() => {
     const messageElement = messagesList.querySelector(
       `[data-message-id="${CSS.escape(messageId)}"]`,
@@ -900,6 +984,15 @@ messagesList.addEventListener('scroll', () => {
   followLatestMessages =
     messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 32;
   updateScrollLatestButton();
+  if (
+    messagesList.scrollTop < 80 &&
+    currentPin &&
+    hasOlderMessages &&
+    !isLoadingOlderMessages &&
+    !searchActive
+  ) {
+    void loadOlderMessages(currentPin);
+  }
 }, { passive: true });
 
 messagesList.addEventListener('load', (event) => {
@@ -962,33 +1055,79 @@ function updateNotificationButton() {
   notificationWarning.hidden = !notificationsEnabled;
 }
 
+async function loadOlderMessages(pin) {
+  const oldest = serverMessages.reduce((oldestMessage, message) =>
+    !oldestMessage || message.createdAt < oldestMessage.createdAt ? message : oldestMessage,
+  null);
+  if (!oldest) return;
+  isLoadingOlderMessages = true;
+  const previousHeight = messagesList.scrollHeight;
+  const previousTop = messagesList.scrollTop;
+  try {
+    const result = await requestChat('load', pin, undefined, undefined, {
+      beforeCursor: oldest.createdAt,
+      limit: 50,
+    });
+    if (currentPin !== pin) return;
+    let olderMessages = await attachPhotoUrls(result.messages, pin);
+    olderMessages = await markMessagesSeen(olderMessages, pin);
+    if (currentPin !== pin) return;
+    const mergedById = new Map(serverMessages.map((message) => [message.id, message]));
+    for (const message of olderMessages) {
+      const previous = mergedById.get(message.id);
+      mergedById.set(message.id, previous?.previewUrl && message.mediaPath
+        ? { ...message, previewUrl: previous.previewUrl }
+        : message);
+    }
+    serverMessages = [...mergedById.values()].sort((first, second) =>
+      first.createdAt.localeCompare(second.createdAt));
+    hasOlderMessages = result.hasOlder === true;
+    refreshVisibleMessages(false, false);
+    window.requestAnimationFrame(() => {
+      messagesList.scrollTop = previousTop + (messagesList.scrollHeight - previousHeight);
+    });
+  } finally {
+    isLoadingOlderMessages = false;
+  }
+}
+
 async function syncMessages(pin, shouldScroll = false) {
-  const result = await requestChat('load', pin);
+  const newestLoadedAt = serverMessages.reduce((latest, message) =>
+    latest && latest > message.createdAt ? latest : message.createdAt,
+  '');
+  const result = await requestChat('load', pin, undefined, undefined, {
+    afterCursor: newestLoadedAt || undefined,
+    limit: 50,
+  });
+  updatePinSentCounts(result.sentCounts);
   if (currentPin !== pin) return;
   let updatedMessages = await attachPhotoUrls(result.messages, pin);
   if (currentPin !== pin) return;
   updatedMessages = await markMessagesSeen(updatedMessages, pin);
   if (currentPin !== pin) return;
-  updatedMessages = updatedMessages.map((message) => {
-    const previous = serverMessages.find((item) => item.id === message.id);
+  const incomingById = new Map(updatedMessages.map((message) => [message.id, message]));
+  const mergedById = new Map(serverMessages.map((message) => [message.id, message]));
+  for (const [id, message] of incomingById) {
+    const previous = mergedById.get(id);
     const merged = previous?.previewUrl && message.mediaPath
       ? { ...message, previewUrl: previous.previewUrl }
       : message;
     const overrides = optimisticReactionOverrides.get(message.id);
-    if (!overrides) return merged;
-
-    for (const [reaction, enabled] of overrides) {
-      const serverHasReaction = message.reactions?.some(
-        (item) => item.player === currentPlayer && item.reaction === reaction,
-      );
-      if (Boolean(serverHasReaction) === enabled) {
-        overrides.delete(reaction);
+    if (overrides) {
+      for (const [reaction, enabled] of overrides) {
+        const serverHasReaction = message.reactions?.some(
+          (item) => item.player === currentPlayer && item.reaction === reaction,
+        );
+        if (Boolean(serverHasReaction) === enabled) {
+          overrides.delete(reaction);
+        }
       }
+      if (!overrides.size) optimisticReactionOverrides.delete(message.id);
     }
-    if (!overrides.size) optimisticReactionOverrides.delete(message.id);
-    return merged;
-  });
-  serverMessages = updatedMessages;
+    mergedById.set(id, merged);
+  }
+  serverMessages = [...mergedById.values()].sort((first, second) =>
+    first.createdAt.localeCompare(second.createdAt));
   updateChatStats();
   refreshVisibleMessages(shouldScroll);
   updatePresence(result.peerPresenceUpdatedAt, result.peerPresenceActive);
@@ -1135,10 +1274,12 @@ async function unlockChat(pin) {
   setStatus('Checking PIN…');
 
   try {
-    const result = await requestChat('load', pin);
+    const result = await requestChat('load', pin, undefined, undefined, { limit: 50 });
     currentPin = pin;
     currentPlayer = result.player;
     currentPeer = result.otherPlayer;
+    updatePinSentCounts(result.sentCounts);
+    hasOlderMessages = result.hasOlder === true;
     serverMessages = await attachPhotoUrls(result.messages, pin);
     serverMessages = await markMessagesSeen(serverMessages, pin);
     if (currentPin !== pin) return;
@@ -1233,6 +1374,12 @@ document.addEventListener('keydown', (event) => {
     if (!photoViewer.hidden) closePhotoViewer();
     else if (!photoReview.hidden) clearPhotoReview();
     else if (!messageActions.hidden) closeMessageActions();
+    else if (editingMessageId) {
+      editingMessageId = null;
+      messageInput.value = '';
+      messageInput.placeholder = `Message as ${currentPlayer}…`;
+      updateCaptureButton();
+    }
     else if (!photoAlbum.hidden) {
       photoAlbum.hidden = true;
       showChatTools();
@@ -1250,6 +1397,30 @@ messageForm.addEventListener('submit', async (event) => {
     return;
   }
   if (!currentPin) return;
+
+  if (editingMessageId) {
+    const messageId = editingMessageId;
+    const pin = currentPin;
+    const previous = serverMessages.find((message) => message.id === messageId);
+    editingMessageId = null;
+    messageInput.value = '';
+    messageInput.placeholder = `Message as ${currentPlayer}…`;
+    updateCaptureButton();
+    if (previous) {
+      previous.content = content;
+      previous.editedAt = new Date().toISOString();
+      refreshVisibleMessages(false, false);
+    }
+    try {
+      await requestChat('edit', pin, content, undefined, { messageId });
+    } catch (error) {
+      if (currentPin === pin) {
+        await syncMessages(pin);
+        setStatus(`Could not edit message: ${error.message}`, true);
+      }
+    }
+    return;
+  }
 
   updateTypingStatus(false);
   enqueueOutgoingMessage({
@@ -1398,25 +1569,56 @@ function openMessageActions(element) {
   }, 700);
   element.classList.add('message--focused');
   messageActions.hidden = false;
+  const editButton = document.querySelector('#edit-message');
+  editButton.hidden = !(
+    message.player === currentPlayer &&
+    !message.mediaUrl &&
+    !message.previewUrl &&
+    Boolean(message.content)
+  );
   positionMessageActions(element);
-  openReactionPicker(element);
 }
 
 function positionMessageActions(messageElement) {
   const messageBounds = messageElement.getBoundingClientRect();
   const panelBounds = chatPanel.getBoundingClientRect();
+  messageActionsButtons.classList.remove('message-actions-buttons--horizontal');
   const actionsBounds = messageActionsButtons.getBoundingClientRect();
   const centerY = messageBounds.top - panelBounds.top + messageBounds.height / 2;
   const gap = 12;
   const canPlaceRight = panelBounds.right - messageBounds.right >= actionsBounds.width + gap;
-  const left = canPlaceRight
-    ? messageBounds.right - panelBounds.left + gap
-    : messageBounds.left - panelBounds.left - actionsBounds.width - gap;
+  const canPlaceLeft = messageBounds.left - panelBounds.left >= actionsBounds.width + gap;
   const maxLeft = Math.max(8, panelBounds.width - actionsBounds.width - 8);
-  const top = Math.max(
-    8,
-    Math.min(centerY - actionsBounds.height / 2, panelBounds.height - actionsBounds.height - 8),
-  );
+  let left;
+  let top;
+
+  if (canPlaceRight) {
+    left = messageBounds.right - panelBounds.left + gap;
+  } else if (canPlaceLeft) {
+    left = messageBounds.left - panelBounds.left - actionsBounds.width - gap;
+  } else {
+    messageActionsButtons.classList.add('message-actions-buttons--horizontal');
+    const horizontalBounds = messageActionsButtons.getBoundingClientRect();
+    left = Math.max(8, Math.min(
+      messageBounds.left - panelBounds.left + messageBounds.width / 2 - horizontalBounds.width / 2,
+      panelBounds.width - horizontalBounds.width - 8,
+    ));
+    const spaceBelow = panelBounds.bottom - messageBounds.bottom;
+    const canPlaceBelow = spaceBelow >= horizontalBounds.height + gap;
+    const spaceAbove = messageBounds.top - panelBounds.top;
+    top = canPlaceBelow
+      ? messageBounds.bottom - panelBounds.top + gap
+      : Math.max(8, spaceAbove >= horizontalBounds.height + gap
+        ? messageBounds.top - panelBounds.top - horizontalBounds.height - gap
+        : panelBounds.height - horizontalBounds.height - 8);
+  }
+
+  if (top === undefined) {
+    top = Math.max(
+      8,
+      Math.min(centerY - actionsBounds.height / 2, panelBounds.height - actionsBounds.height - 8),
+    );
+  }
   messageActionsButtons.style.left = `${Math.max(8, Math.min(left, maxLeft))}px`;
   messageActionsButtons.style.top = `${top}px`;
 }
@@ -1498,6 +1700,17 @@ document.querySelector('#copy-message').addEventListener('click', async () => {
     setStatus(`Could not copy message: ${error.message}`, true);
   }
 });
+document.querySelector('#edit-message').addEventListener('click', () => {
+  const message = currentMessages.find((item) => item.id === activeActionMessageId);
+  if (!message || message.player !== currentPlayer || message.mediaPath) return;
+  closeMessageActions();
+  editingMessageId = message.id;
+  messageInput.value = message.content || '';
+  messageInput.placeholder = 'Edit message…';
+  updateCaptureButton();
+  messageInput.focus();
+  messageInput.setSelectionRange(messageInput.value.length, messageInput.value.length);
+});
 document.querySelector('#photo-viewer-backdrop').addEventListener('click', closePhotoViewer);
 document.querySelector('#close-photo-viewer').addEventListener('click', closePhotoViewer);
 document.querySelector('#download-photo').addEventListener('click', () => {
@@ -1508,7 +1721,25 @@ messageSearch.addEventListener('input', () => {
   searchQuery = messageSearch.value.trim().toLocaleLowerCase();
   searchMatchIndex = 0;
   searchResultIds = [];
+  serverSearchResults = [];
+  window.clearTimeout(searchRequestTimer);
+  if (!searchQuery || !currentPin) {
+    refreshVisibleMessages();
+    return;
+  }
   refreshVisibleMessages();
+  searchRequestTimer = window.setTimeout(async () => {
+    try {
+      const result = await requestChat('search', currentPin, undefined, undefined, { query: searchQuery });
+      if (!currentPin || messageSearch.value.trim().toLocaleLowerCase() !== searchQuery) return;
+      serverSearchResults = await attachPhotoUrls(result.matches, currentPin);
+      searchResultIds = serverSearchResults.map((message) => message.id);
+      searchMatchIndex = 0;
+      refreshVisibleMessages();
+    } catch (error) {
+      setStatus(`Could not search messages: ${error.message}`, true);
+    }
+  }, 250);
 });
 previousSearchResultButton.addEventListener('click', () => navigateSearchResults(-1));
 nextSearchResultButton.addEventListener('click', () => navigateSearchResults(1));
@@ -1540,6 +1771,8 @@ function closeSearch() {
   messageSearch.value = '';
   searchQuery = '';
   searchResultIds = [];
+  serverSearchResults = [];
+  window.clearTimeout(searchRequestTimer);
   searchMatchIndex = 0;
   refreshVisibleMessages();
   if (returnToToolsAfterSearch) showChatTools();

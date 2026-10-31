@@ -78,6 +78,11 @@ Deno.serve(async (request) => {
     subscription?: unknown;
     endpoint?: unknown;
     notificationTitle?: unknown;
+    query?: unknown;
+    limit?: unknown;
+    beforeCursor?: unknown;
+    afterCursor?: unknown;
+    aroundCursor?: unknown;
   };
   try {
     body = await request.json();
@@ -87,6 +92,8 @@ Deno.serve(async (request) => {
 
   if (
     body.action !== 'load' &&
+    body.action !== 'search' &&
+    body.action !== 'edit' &&
     body.action !== 'send' &&
     body.action !== 'seen' &&
     body.action !== 'typing' &&
@@ -116,11 +123,11 @@ Deno.serve(async (request) => {
   const player = body.pin === pin1
     ? (Deno.env.get('CHAT_PLAYER_1') || 'ashy')
     : body.pin === pin2
-      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
+      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
       : undefined;
   const allowedPhotoPlayers = [
     Deno.env.get('CHAT_PLAYER_1') || 'ashy',
-    Deno.env.get('CHAT_PLAYER_2') || 'alfey',
+    Deno.env.get('CHAT_PLAYER_2') || 'alfie',
   ];
 
   const supabase = createClient(url, serviceKey, {
@@ -244,11 +251,136 @@ Deno.serve(async (request) => {
     });
   }
 
+  if (body.action === 'edit') {
+    const messageId = body.messageId;
+    const content = typeof body.content === 'string' ? body.content.trim() : '';
+    if (
+      typeof messageId !== 'string' ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(messageId) ||
+      !content ||
+      content.length > 2000
+    ) {
+      return respond({ error: 'Enter a valid edited message.' }, 400);
+    }
+
+    const { data: message, error: loadError } = await supabase
+      .from('chat_messages')
+      .select('id, player, media_path')
+      .eq('id', messageId)
+      .maybeSingle();
+    if (loadError || !message) {
+      return respond({ error: 'Could not find that message.' }, 404);
+    }
+    if (message.player !== player) {
+      return respond({ error: 'You can only edit your own messages.' }, 403);
+    }
+    if (message.media_path) {
+      return respond({ error: 'Photo messages cannot be edited.' }, 400);
+    }
+
+    const { data: updated, error } = await supabase
+      .from('chat_messages')
+      .update({ content, edited_at: new Date().toISOString() })
+      .eq('id', messageId)
+      .eq('player', player)
+      .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to')
+      .single();
+    if (error) {
+      console.error('Could not edit chat message:', error.message);
+      return respond({ error: 'Could not edit your message.' }, 500);
+    }
+    return respond({ message: updated });
+  }
+
+  if (body.action === 'search') {
+    const query = typeof body.query === 'string' ? body.query.trim().slice(0, 200) : '';
+    if (!query) return respond({ matches: [] });
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('id, player, content, media_path, created_at, edited_at')
+      .ilike('content', `%${query}%`)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) {
+      console.error('Could not search chat messages:', error.message);
+      return respond({ error: 'Could not search chat history.' }, 500);
+    }
+    return respond({
+      matches: (data ?? []).map((message) => ({
+        id: message.id,
+        player: message.player,
+        content: message.content,
+        mediaPath: message.media_path,
+        createdAt: message.created_at,
+        editedAt: message.edited_at,
+      })),
+    });
+  }
+
   if (body.action === 'load') {
     const otherPlayer = body.pin === pin1
-      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
+      ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
       : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
     const typingSince = new Date(Date.now() - 5000).toISOString();
+    const requestedLimit = Number(body.limit);
+    const limit = Number.isInteger(requestedLimit)
+      ? Math.max(1, Math.min(requestedLimit, 50))
+      : 50;
+    const beforeCursor = typeof body.beforeCursor === 'string'
+      ? new Date(body.beforeCursor)
+      : null;
+    const afterCursor = typeof body.afterCursor === 'string'
+      ? new Date(body.afterCursor)
+      : null;
+    const aroundCursor = typeof body.aroundCursor === 'string'
+      ? new Date(body.aroundCursor)
+      : null;
+    if (
+      (beforeCursor && Number.isNaN(beforeCursor.getTime())) ||
+      (afterCursor && Number.isNaN(afterCursor.getTime())) ||
+      (aroundCursor && Number.isNaN(aroundCursor.getTime()))
+    ) {
+      return respond({ error: 'Invalid message cursor.' }, 400);
+    }
+
+    let messageQuery = supabase
+      .from('chat_messages')
+      .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to');
+    if (aroundCursor) {
+      const before = supabase
+        .from('chat_messages')
+        .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to')
+        .lte('created_at', aroundCursor.toISOString())
+        .order('created_at', { ascending: false })
+        .limit(25);
+      const after = supabase
+        .from('chat_messages')
+        .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to')
+        .gte('created_at', aroundCursor.toISOString())
+        .order('created_at', { ascending: true })
+        .limit(25);
+      const [beforeResult, afterResult] = await Promise.all([before, after]);
+      if (beforeResult.error || afterResult.error) {
+        return respond({ error: 'Could not load the message context.' }, 500);
+      }
+      const contextById = new Map<string, Record<string, unknown>>();
+      for (const message of [...(beforeResult.data ?? []), ...(afterResult.data ?? [])]) {
+        contextById.set(message.id, message);
+      }
+      const context = [...contextById.values()].sort((a, b) =>
+        String(a.created_at).localeCompare(String(b.created_at)));
+      messageQuery = supabase
+        .from('chat_messages')
+        .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to')
+        .in('id', context.map((message) => message.id));
+      messageQuery = messageQuery.order('created_at', { ascending: false });
+    } else {
+      if (beforeCursor) messageQuery = messageQuery.lt('created_at', beforeCursor.toISOString());
+      if (afterCursor) messageQuery = messageQuery.gt('created_at', afterCursor.toISOString());
+      messageQuery = messageQuery
+        .order('created_at', { ascending: afterCursor ? true : false })
+        .limit(limit + ((!afterCursor && !beforeCursor) || beforeCursor ? 1 : 0));
+    }
     const { error: presenceUpdateError } = await supabase
       .from('chat_presence')
       .upsert({ player, is_active: true, updated_at: new Date().toISOString() }, { onConflict: 'player' });
@@ -256,12 +388,10 @@ Deno.serve(async (request) => {
       { data, error },
       { data: typingState, error: typingError },
       { data: peerPresence, error: presenceError },
+      xCountResult,
+      yCountResult,
     ] = await Promise.all([
-      supabase
-        .from('chat_messages')
-        .select('id, player, content, media_path, created_at, seen_by, seen_at, reply_to')
-        .order('created_at', { ascending: false })
-        .limit(1000),
+      messageQuery,
       supabase
         .from('chat_typing')
         .select('player')
@@ -274,6 +404,14 @@ Deno.serve(async (request) => {
         .select('is_active, updated_at')
         .eq('player', otherPlayer)
         .maybeSingle(),
+      supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('player', Deno.env.get('CHAT_PLAYER_2') || 'alfie'),
+      supabase
+        .from('chat_messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('player', Deno.env.get('CHAT_PLAYER_1') || 'ashy'),
     ]);
 
     if (error) {
@@ -290,7 +428,20 @@ Deno.serve(async (request) => {
       return respond({ error: 'Could not load account presence.' }, 500);
     }
 
-    const messages = data.reverse();
+    let messages = data ?? [];
+    let hasOlder = false;
+    if (beforeCursor) {
+      hasOlder = messages.length > limit;
+      if (hasOlder) messages = messages.slice(0, limit);
+      messages = messages.reverse();
+    } else if (aroundCursor) {
+      messages = messages.sort((a, b) =>
+        String(a.created_at).localeCompare(String(b.created_at)));
+    } else if (!afterCursor) {
+      hasOlder = messages.length > limit;
+      if (hasOlder) messages = messages.slice(0, limit);
+      messages = messages.reverse();
+    }
     const messageIds = messages.map((message) => message.id);
     const replyToIds = [...new Set(messages.map((message) => message.reply_to).filter(Boolean))];
     const { data: reactions, error: reactionsError } = messageIds.length
@@ -329,12 +480,18 @@ Deno.serve(async (request) => {
       typingPlayer: typingState?.player ?? null,
       peerPresenceUpdatedAt: peerPresence?.updated_at ?? null,
       peerPresenceActive: peerPresence?.is_active === true,
+      hasOlder,
+      sentCounts: {
+        x: xCountResult.count ?? 0,
+        y: yCountResult.count ?? 0,
+      },
       messages: messages.map((message) => ({
         id: message.id,
         player: message.player,
         content: message.content,
         mediaPath: message.media_path,
         createdAt: message.created_at,
+        editedAt: message.edited_at,
         seenBy: message.seen_by,
         seenAt: message.seen_at,
         replyTo: message.reply_to
@@ -554,7 +711,7 @@ Deno.serve(async (request) => {
   const { data: message, error } = await supabase
     .from('chat_messages')
     .insert({ player, content, media_path: mediaPath, reply_to: replyToId })
-    .select('id, player, content, media_path, created_at, seen_by, seen_at, reply_to')
+    .select('id, player, content, media_path, created_at, edited_at, seen_by, seen_at, reply_to')
     .single();
 
   if (error) {
@@ -563,7 +720,7 @@ Deno.serve(async (request) => {
   }
 
   const recipientPlayer = body.pin === pin1
-    ? (Deno.env.get('CHAT_PLAYER_2') || 'alfey')
+    ? (Deno.env.get('CHAT_PLAYER_2') || 'alfie')
     : (Deno.env.get('CHAT_PLAYER_1') || 'ashy');
   const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
   const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
@@ -623,6 +780,7 @@ Deno.serve(async (request) => {
       content: message.content,
       mediaPath: message.media_path,
       createdAt: message.created_at,
+      editedAt: message.edited_at,
       seenBy: message.seen_by,
       seenAt: message.seen_at,
       replyTo: replyParent

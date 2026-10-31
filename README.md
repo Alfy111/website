@@ -23,7 +23,7 @@ A minimal two-player chat built with vanilla JavaScript, Vite, and Supabase. Ent
    Keep the private key secret. Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` (for example `mailto:you@example.com`) in Supabase Edge Function secrets, alongside `CHAT_PIN_1`, `CHAT_PIN_2`, `CHAT_PLAYER_1`, and `CHAT_PLAYER_2`. Never put the VAPID private key or service-role key in the frontend. The app fetches the matching public key from the PIN-checked function when enabling push.
 
    ```sh
-   supabase secrets set CHAT_PIN_1=your-first-pin CHAT_PIN_2=your-second-pin CHAT_PLAYER_1=ashy CHAT_PLAYER_2=alfey VAPID_PUBLIC_KEY=your-public-key VAPID_PRIVATE_KEY=your-private-key VAPID_SUBJECT=mailto:you@example.com
+   supabase secrets set CHAT_PIN_1=your-first-pin CHAT_PIN_2=your-second-pin CHAT_PLAYER_1=ashy CHAT_PLAYER_2=alfie VAPID_PUBLIC_KEY=your-public-key VAPID_PRIVATE_KEY=your-private-key VAPID_SUBJECT=mailto:you@example.com
    ```
 
 6. Create the private push-subscription table. For a fresh project, run [`supabase/schema.sql`](./supabase/schema.sql). If the chat tables already exist, run only this migration in the SQL Editor:

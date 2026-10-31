@@ -107,6 +107,60 @@ button:disabled {
   transform: translateY(5vh);
 }
 
+.pin-sent-counts {
+  width: 100%;
+  display: grid;
+  gap: 8px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.pin-sent-count {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+}
+
+.pin-sent-count--x {
+  color: #ff6b6b;
+  text-shadow: 0 0 8px rgb(255 59 59 / 82%), 0 0 18px rgb(255 59 59 / 42%);
+}
+
+.pin-sent-count--y {
+  color: #c49a6c;
+  text-shadow: 0 0 8px rgb(166 112 73 / 82%), 0 0 18px rgb(166 112 73 / 42%);
+}
+
+.pin-sent-label strong {
+  color: currentColor;
+  font-size: 15px;
+}
+
+.pin-sent-count button {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: transparent;
+  color: currentColor;
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.pin-sent-count button:hover {
+  opacity: 1;
+  box-shadow: 0 0 12px currentColor;
+}
+
 .pin-dots {
   min-height: 24px;
   display: flex;
@@ -714,7 +768,7 @@ button:disabled {
 .message--focused .reaction-options {
   grid-template-columns: repeat(6, 40px);
   gap: 4px;
-  padding: 6px;
+  padding: 0;
 }
 
 .message--focused .reaction-option {
@@ -877,14 +931,14 @@ button:disabled {
 
 .reaction-options {
   display: none;
-  grid-template-columns: repeat(3, 82px);
+  grid-template-columns: repeat(6, 36px);
   gap: 6px;
   width: max-content;
-  padding: 8px;
-  border: 1px solid #3f3f46;
-  border-radius: 12px;
-  background: #09090b;
-  box-shadow: 0 4px 14px rgb(0 0 0 / 40%);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .message-reaction-picker--open .reaction-options {
@@ -1215,6 +1269,22 @@ button:disabled {
 
 .message-actions-buttons button:hover {
   background: #3f3f46;
+}
+
+.message-actions-buttons--horizontal {
+  width: max-content;
+  max-width: calc(100% - 16px);
+  flex-direction: row;
+}
+
+.message-actions-buttons--horizontal button {
+  flex: 0 0 auto;
+}
+
+.message-edited {
+  margin-left: 6px;
+  color: #a1a1aa;
+  font-size: 10px;
 }
 
 .photo-review-card h2 {
