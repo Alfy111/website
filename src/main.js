@@ -634,6 +634,18 @@ function updateMessages(messages, shouldScroll = false, animateNewMessages = tru
   if (nextIds === renderedMessageIds) return;
 
   const wasAtBottom = messagesList.scrollHeight - messagesList.scrollTop - messagesList.clientHeight < 32;
+  const previousScrollTop = messagesList.scrollTop;
+  const listBounds = messagesList.getBoundingClientRect();
+  let scrollAnchorId;
+  let scrollAnchorOffset;
+  for (const element of messagesList.querySelectorAll('[data-message-id]')) {
+    const bounds = element.getBoundingClientRect();
+    if (bounds.bottom > listBounds.top) {
+      scrollAnchorId = element.dataset.messageId;
+      scrollAnchorOffset = bounds.top - listBounds.top;
+      break;
+    }
+  }
   messagesList.replaceChildren();
   const latestMessage = messages.at(-1);
   const latestOwnMessageId = latestMessage?.player === currentPlayer
@@ -670,8 +682,38 @@ function updateMessages(messages, shouldScroll = false, animateNewMessages = tru
   if (shouldScroll || wasAtBottom) {
     followLatestMessages = true;
     messagesList.scrollTop = messagesList.scrollHeight;
+  } else if (scrollAnchorId) {
+    const anchor = messagesList.querySelector(
+      `[data-message-id="${CSS.escape(scrollAnchorId)}"]`,
+    );
+    if (anchor) {
+      const anchorOffset = anchor.getBoundingClientRect().top - listBounds.top;
+      messagesList.scrollTop = Math.max(0, messagesList.scrollTop + anchorOffset - scrollAnchorOffset);
+    } else {
+      messagesList.scrollTop = previousScrollTop;
+    }
+  } else {
+    messagesList.scrollTop = previousScrollTop;
   }
   updateScrollLatestButton();
+  if (!shouldScroll && !wasAtBottom) {
+    window.requestAnimationFrame(() => {
+      if (!scrollAnchorId) {
+        messagesList.scrollTop = previousScrollTop;
+        return;
+      }
+      const anchor = messagesList.querySelector(
+        `[data-message-id="${CSS.escape(scrollAnchorId)}"]`,
+      );
+      if (!anchor) {
+        messagesList.scrollTop = previousScrollTop;
+        return;
+      }
+      const anchorOffset = anchor.getBoundingClientRect().top - listBounds.top;
+      messagesList.scrollTop = Math.max(0, messagesList.scrollTop + anchorOffset - scrollAnchorOffset);
+      updateScrollLatestButton();
+    });
+  }
 }
 
 function updateSearchResultControls() {
