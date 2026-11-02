@@ -2025,6 +2025,9 @@ function closeSearch() {
 chatPlayer.addEventListener('click', showChatTools);
 document.querySelector('#close-chat-tools').addEventListener('click', hideChatTools);
 document.querySelector('#open-search').addEventListener('click', openSearch);
+document.querySelector('#open-surprise').addEventListener('click', () => {
+  window.location.assign('https://ashy-io3h.vercel.app');
+});
 const noteEditor = document.querySelector('#note-editor');
 const chatNoteInput = document.querySelector('#chat-note-input');
 const openNoteEditor = document.querySelector('#open-note-editor');
